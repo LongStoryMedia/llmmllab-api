@@ -32,7 +32,9 @@ from models import (
     MessageContentType,
     WorkflowConfig,
 )
-from runner import pipeline_factory
+from services.runner_client import runner_client, ServerHandle
+from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from agents.chat import ChatAgent
 from graph.workflows.base import GraphBuilder, should_continue_tool_calls
@@ -89,6 +91,10 @@ class IdeGraphBuilder(GraphBuilder):
     Graph: START -> Agent -> (tools? -> ToolNode -> Agent) | END.
     """
 
+    def __init__(self, storage: "Storage", user_config: UserConfig):
+        super().__init__(storage, user_config)
+        self._server_handle: Optional[ServerHandle] = None
+
     async def build_workflow(
         self,
         user_id: str,
@@ -121,11 +127,12 @@ class IdeGraphBuilder(GraphBuilder):
         try:
             # Look up model by name or fall back to first TextToText model
             if model_name:
-                model_def = pipeline_factory._get_model_by_id(model_name)
+                all_models = await runner_client.list_models()
+                model_def = next((m for m in all_models if m.name == model_name), None)
                 if not model_def:
                     raise RuntimeError(f"Model '{model_name}' not found")
             else:
-                model_def = pipeline_factory.get_model_by_task(ModelTask.TEXTTOTEXT)
+                model_def = await runner_client.model_by_task(ModelTask.TEXTTOTEXT)
                 if not model_def:
                     raise RuntimeError("No TextToText model available")
 
@@ -135,10 +142,18 @@ class IdeGraphBuilder(GraphBuilder):
                 model=model_def.name,
                 model_arg=model_name,
             )
-            primary_pipeline = pipeline_factory.get_pipeline(model=model_def)
-            # Keep a strong reference to the original pipeline throughout build_workflow
-            # so GC cannot collect it when bind_tools returns a RunnableBinding wrapper
-            primary_model = primary_pipeline
+
+            server_handle = await runner_client.acquire_server(
+                model_id=model_def.name,
+                task=model_def.task,
+            )
+
+            primary_model = ChatOpenAI(
+                base_url=server_handle.base_url,
+                api_key=SecretStr("none"),
+                model=model_def.name,
+            )
+            self._server_handle = server_handle
 
             # Bind client tools to the pipeline so the LLM can generate tool_calls
             if client_tools:
