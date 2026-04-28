@@ -54,49 +54,6 @@ async def proxy_request(request: Request, server_id: str, path: str):
         headers["host"] = f"127.0.0.1:{entry.port}"
 
         method = request.method
-        content_type = headers.get("content-type", "")
-
-        async def stream_sse():
-            """Stream SSE response from upstream."""
-            async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream(
-                    method=method,
-                    url=upstream_url,
-                    headers=headers,
-                    content=body if body else None,
-                ) as response:
-                    # Set status code and headers on the streaming response
-                    yield response.status_code
-                    yield dict(response.headers)
-                    async for chunk in response.aiter_bytes():
-                        yield chunk
-
-        async def stream_response():
-            """Stream or buffer response from upstream."""
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream(
-                    method=method,
-                    url=upstream_url,
-                    headers=headers,
-                    content=body if body else None,
-                ) as response:
-                    response_headers = dict(response.headers)
-
-                    # Check if this is an SSE stream
-                    is_sse = "text/event-stream" in response_headers.get("content-type", "")
-
-                    if is_sse:
-                        # Stream SSE without buffering
-                        async for chunk in response.aiter_bytes():
-                            yield chunk
-                    else:
-                        # Buffer regular responses
-                        content = b""
-                        async for chunk in response.aiter_bytes():
-                            content += chunk
-                        yield content
-
-        # Execute the upstream request
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 method=method,
