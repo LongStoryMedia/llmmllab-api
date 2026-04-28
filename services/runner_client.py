@@ -7,7 +7,7 @@ shutdown) and model discovery across all runners.
 """
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
@@ -38,7 +38,7 @@ class RunnerClient:
     # Health
     # ------------------------------------------------------------------
 
-    async def _check_runner_health(self, endpoint: str) -> Optional[dict]:
+    async def _health(self, endpoint: str) -> Optional[dict]:
         """Check health of a single runner. Returns health dict or None."""
         try:
             async with httpx.AsyncClient(timeout=5) as client:
@@ -58,45 +58,25 @@ class RunnerClient:
                 self._healthy.remove(endpoint)
             return None
 
-    async def _refresh_all_health(self):
-        """Check health of all runners concurrently."""
-        tasks = [self._check_runner_health(ep) for ep in self._endpoints]
-        await asyncio.gather(*tasks, return_exceptions=True)
-
     # ------------------------------------------------------------------
     # Runner selection
     # ------------------------------------------------------------------
 
-    def _select_runner(self, model_id: str) -> Optional[str]:
-        """Pick the best healthy runner that has the requested model.
-
-        Prefers runners with the highest available VRAM.
-        """
+    async def _select_runner(self, model_id: str) -> Optional[str]:
+        """Iterate endpoints, pick highest VRAM runner with matching model."""
         best_url = None
         best_vram = -1
-        for endpoint in self._healthy:
-            # We rely on the latest health data; for VRAM comparison we
-            # would need cached health data. For now, prefer the first
-            # healthy runner (most recently confirmed healthy).
-            best_url = endpoint
-            break
-        return best_url
-
-    async def _select_runner_with_model(self, model_id: str) -> Optional[str]:
-        """Refresh health and pick a runner that has the requested model."""
-        await self._refresh_all_health()
-
-        best_url = None
-        best_vram = -1
-        for endpoint in self._healthy:
-            health = await self._check_runner_health(endpoint)
-            if health:
-                models = health.get("models", [])
-                if model_id in models:
-                    vram = health.get("gpu", {}).get("available_vram_bytes", 0)
-                    if vram > best_vram:
-                        best_vram = vram
-                        best_url = endpoint
+        for endpoint in self._endpoints:
+            health = await self._health(endpoint)
+            if not health:
+                continue
+            models = health.get("models", [])
+            if model_id not in models:
+                continue
+            vram = health.get("gpu", {}).get("available_vram_bytes", 0)
+            if vram > best_vram:
+                best_vram = vram
+                best_url = endpoint
         return best_url
 
     # ------------------------------------------------------------------
@@ -127,15 +107,16 @@ class RunnerClient:
             "config_override": config_override,
         }
 
-        # Try healthy runners first (sorted by VRAM if we had cached data),
-        # then fall back to all endpoints.
-        await self._refresh_all_health()
-
-        # Build ordered list: healthy first, then the rest
-        ordered = list(self._healthy)
-        for ep in self._endpoints:
-            if ep not in ordered:
-                ordered.append(ep)
+        # Select the best runner by VRAM with matching model
+        best = await self._select_runner(model_id)
+        if best:
+            # Put best runner first, then the rest
+            ordered = [best]
+            for ep in self._endpoints:
+                if ep != best:
+                    ordered.append(ep)
+        else:
+            ordered = list(self._endpoints)
 
         last_error = None
         for endpoint in ordered:

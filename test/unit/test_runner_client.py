@@ -29,7 +29,7 @@ class TestRunnerClientHealth:
 
     @pytest.mark.asyncio
     async def test_healthy_returns_data(self):
-        """Mock 200 /health and verify _check_runner_health returns dict."""
+        """Mock 200 /health and verify _health returns dict."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -46,7 +46,7 @@ class TestRunnerClientHealth:
 
         with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
             client = RunnerClient(endpoints=["http://runner1:8000"])
-            result = await client._check_runner_health("http://runner1:8000")
+            result = await client._health("http://runner1:8000")
 
         assert result is not None
         assert result["status"] == "ok"
@@ -54,7 +54,7 @@ class TestRunnerClientHealth:
 
     @pytest.mark.asyncio
     async def test_unhealthy_returns_none(self):
-        """Mock httpx.RequestError and verify _check_runner_health returns None."""
+        """Mock httpx.RequestError and verify _health returns None."""
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=Exception("connection refused"))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -62,7 +62,7 @@ class TestRunnerClientHealth:
 
         with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
             client = RunnerClient(endpoints=["http://runner1:8000"])
-            result = await client._check_runner_health("http://runner1:8000")
+            result = await client._health("http://runner1:8000")
 
         assert result is None
 
