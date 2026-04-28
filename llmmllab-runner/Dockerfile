@@ -70,7 +70,7 @@ WORKDIR /app
 RUN uv venv --python 3.12 ${SHARED_VENV}
 
 # Copy only the dep manifests first
-COPY llmmllab-runner/pyproject.toml llmmllab-runner/uv.lock llmmllab-runner/.python-version ./
+COPY llmmllab-runner/pyproject.toml ./
 
 # Install dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \

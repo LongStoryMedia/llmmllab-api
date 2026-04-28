@@ -2,7 +2,7 @@
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from fastapi import FastAPI
 
@@ -18,11 +18,24 @@ logger = llmmllogger.bind(component="RunnerApp")
 
 # Global cache instance (initialized at startup)
 server_cache: ServerCache = None  # type: ignore
+_evict_task: Optional[asyncio.Task] = None
+
+# Module-level ModelLoader singleton (avoids re-instantiation on every health check)
+_model_loader = None
+
+
+def get_model_loader():
+    """Lazy singleton for ModelLoader."""
+    global _model_loader
+    if _model_loader is None:
+        from utils.model_loader import ModelLoader
+        _model_loader = ModelLoader()
+    return _model_loader
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    global server_cache
+    global server_cache, _evict_task
     logger.info("Runner starting up")
     server_cache = ServerCache()
     logger.info("ServerCache initialized")
@@ -35,11 +48,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             if evicted:
                 logger.info(f"Evicted {len(evicted)} idle servers")
 
-    asyncio.create_task(evict_idle_servers())
+    _evict_task = asyncio.create_task(evict_idle_servers())
 
     yield
 
     logger.info("Runner shutting down")
+    # Cancel the background eviction task before stopping servers
+    if _evict_task:
+        _evict_task.cancel()
+        try:
+            await _evict_task
+        except asyncio.CancelledError:
+            pass
     if server_cache:
         server_cache.stop_all()
     logger.info("Runner shutdown complete")
@@ -64,8 +84,7 @@ def health():
     gpu_stats = hardware_manager.gpu_stats()
     models = []
     try:
-        from utils.model_loader import ModelLoader
-        loader = ModelLoader()
+        loader = get_model_loader()
         for m in loader.get_available_models().values():
             models.append({
                 "id": m.id,
