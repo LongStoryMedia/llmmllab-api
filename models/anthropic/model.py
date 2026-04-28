@@ -1,0 +1,16 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class Model(BaseModel):
+    id: Annotated[str, Field(...)]
+    type: Annotated[Literal["model"], Field(...)]
+    display_name: Annotated[str, Field(...)]
+    created_at: Annotated[datetime, Field(...)]
+
+    model_config = ConfigDict(extra="ignore")

@@ -1,0 +1,12 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ParallelToolCalls(BaseModel):
+    """Whether to enable [parallel function calling](https://platform.openai.com/docs/guides/function-calling#configuring-parallel-function-calling) during tool use."""
+    pass

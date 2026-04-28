@@ -1,0 +1,34 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+class ToolChoiceAuto(BaseModel):
+    """Tool selection that the assistant should honor when executing the item."""
+
+    type: Annotated[Literal["auto"], Field(...)]
+
+
+class ToolChoiceAny(BaseModel):
+    """Tool selection that the assistant should honor when executing the item."""
+
+    type: Annotated[Literal["any"], Field(...)]
+
+
+class ToolChoiceTool(BaseModel):
+    """Tool selection that the assistant should honor when executing the item."""
+
+    type: Annotated[Literal["tool"], Field(...)]
+    name: Annotated[str, Field(...)]
+
+
+class ToolChoiceNone(BaseModel):
+    """Tool selection that the assistant should honor when executing the item."""
+
+    type: Annotated[Literal["none"], Field(...)]
+
+
+ToolChoice = Union[ToolChoiceAuto, ToolChoiceAny, ToolChoiceTool, ToolChoiceNone]

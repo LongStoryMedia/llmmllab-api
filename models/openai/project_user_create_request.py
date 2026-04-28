@@ -1,0 +1,16 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ProjectUserCreateRequest(BaseModel):
+    role: Annotated[Literal["owner", "member"], Field(..., description="`owner` or `member`")]
+    """`owner` or `member`"""
+    user_id: Annotated[str, Field(..., description="The ID of the user.")]
+    """The ID of the user."""
+
+    model_config = ConfigDict(extra="ignore")

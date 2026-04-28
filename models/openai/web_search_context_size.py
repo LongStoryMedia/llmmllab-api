@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from enum import Enum
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, constr
+
+
+
+class WebSearchContextSize(str, Enum):
+    """High level guidance for the amount of context window space to use for the 
+search. One of `low`, `medium`, or `high`. `medium` is the default.
+"""
+    LOW = 'low'
+    MEDIUM = 'medium'
+    HIGH = 'high'

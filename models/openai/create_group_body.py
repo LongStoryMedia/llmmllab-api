@@ -1,0 +1,15 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class CreateGroupBody(BaseModel):
+    """Request payload for creating a new group in the organization."""
+    name: Annotated[str, Field(..., description="Human readable name for the group.")]
+    """Human readable name for the group."""
+
+    model_config = ConfigDict(extra="ignore")

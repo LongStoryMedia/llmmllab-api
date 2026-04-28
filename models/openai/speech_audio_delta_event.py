@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class SpeechAudioDeltaEvent(BaseModel):
+    """Emitted for each chunk of audio data generated during speech synthesis."""
+    audio: Annotated[str, Field(..., description="A chunk of Base64-encoded audio data. ")]
+    """A chunk of Base64-encoded audio data. """
+    type: Annotated[Literal["speech.audio.delta"], Field(..., description="The type of the event. Always `speech.audio.delta`. ")]
+    """The type of the event. Always `speech.audio.delta`. """
+
+    model_config = ConfigDict(extra="ignore")

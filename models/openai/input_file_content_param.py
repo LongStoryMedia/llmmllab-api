@@ -1,0 +1,19 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class InputFileContentParam(BaseModel):
+    """A file input to the model."""
+    file_data: Annotated[Optional[Union[str, Any]], Field(default=None)] = None
+    file_id: Annotated[Optional[Union[str, Any]], Field(default=None)] = None
+    file_url: Annotated[Optional[Union[str, Any]], Field(default=None)] = None
+    filename: Annotated[Optional[Union[str, Any]], Field(default=None)] = None
+    type: Annotated[Literal["input_file"], Field(default='input_file', description="The type of the input item. Always `input_file`.")]
+    """The type of the input item. Always `input_file`."""
+
+    model_config = ConfigDict(extra="ignore")

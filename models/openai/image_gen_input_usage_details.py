@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ImageGenInputUsageDetails(BaseModel):
+    """The input tokens detailed information for the image generation."""
+    image_tokens: Annotated[int, Field(..., description="The number of image tokens in the input prompt.")]
+    """The number of image tokens in the input prompt."""
+    text_tokens: Annotated[int, Field(..., description="The number of text tokens in the input prompt.")]
+    """The number of text tokens in the input prompt."""
+
+    model_config = ConfigDict(extra="ignore")

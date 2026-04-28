@@ -1,0 +1,14 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .message_delta_content_text_annotations_file_citation_object import MessageDeltaContentTextAnnotationsFileCitationObject
+from .message_delta_content_text_annotations_file_citation_object import FileCitation
+from .message_delta_content_text_annotations_file_path_object import MessageDeltaContentTextAnnotationsFilePathObject
+from .message_delta_content_text_annotations_file_path_object import FilePath
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+TextAnnotationDelta = Union[MessageDeltaContentTextAnnotationsFileCitationObject, MessageDeltaContentTextAnnotationsFilePathObject]

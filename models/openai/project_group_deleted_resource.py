@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ProjectGroupDeletedResource(BaseModel):
+    """Confirmation payload returned after removing a group from a project."""
+    deleted: Annotated[bool, Field(..., description="Whether the group membership in the project was removed.")]
+    """Whether the group membership in the project was removed."""
+    object: Annotated[Literal["project.group.deleted"], Field(..., description="Always `project.group.deleted`.")]
+    """Always `project.group.deleted`."""
+
+    model_config = ConfigDict(extra="ignore")

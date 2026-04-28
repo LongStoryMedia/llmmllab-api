@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class InputTextContent(BaseModel):
+    """A text input to the model."""
+    text: Annotated[str, Field(..., description="The text input to the model.")]
+    """The text input to the model."""
+    type: Annotated[Literal["input_text"], Field(default='input_text', description="The type of the input item. Always `input_text`.")]
+    """The type of the input item. Always `input_text`."""
+
+    model_config = ConfigDict(extra="ignore")

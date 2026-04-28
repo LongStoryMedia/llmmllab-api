@@ -1,0 +1,16 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class CompleteUploadRequest(BaseModel):
+    md5: Annotated[Optional[str], Field(default=None, description="The optional md5 checksum for the file contents to verify if the bytes uploaded matches what you expect. ")] = None
+    """The optional md5 checksum for the file contents to verify if the bytes uploaded matches what you expect. """
+    part_ids: Annotated[List[str], Field(..., description="The ordered list of Part IDs. ")]
+    """The ordered list of Part IDs. """
+
+    model_config = ConfigDict(extra="ignore")

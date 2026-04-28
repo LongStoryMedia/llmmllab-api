@@ -1,0 +1,23 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+class ThinkingConfig(BaseModel):
+    """Extended thinking configuration (beta)."""
+
+    type: Annotated[Literal["enabled", "disabled", "adaptive"], Field(...)]
+    budget_tokens: Annotated[
+        Optional[int],
+        Field(
+            default=None,
+            description="Maximum tokens to spend on thinking. Required when enabled.",
+            ge=1024,
+        ),
+    ] = None
+    """Maximum tokens to spend on thinking. Required when enabled."""
+
+    model_config = ConfigDict(extra="ignore")

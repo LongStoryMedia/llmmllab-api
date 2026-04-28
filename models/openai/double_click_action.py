@@ -1,0 +1,19 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class DoubleClickAction(BaseModel):
+    """A double click action."""
+    type: Annotated[Literal["double_click"], Field(default='double_click', description="Specifies the event type. For a double click action, this property is always set to `double_click`.")]
+    """Specifies the event type. For a double click action, this property is always set to `double_click`."""
+    x: Annotated[int, Field(..., description="The x-coordinate where the double click occurred.")]
+    """The x-coordinate where the double click occurred."""
+    y: Annotated[int, Field(..., description="The y-coordinate where the double click occurred.")]
+    """The y-coordinate where the double click occurred."""
+
+    model_config = ConfigDict(extra="ignore")

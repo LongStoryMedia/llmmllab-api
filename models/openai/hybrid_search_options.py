@@ -1,0 +1,16 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class HybridSearchOptions(BaseModel):
+    embedding_weight: Annotated[float, Field(..., description="The weight of the embedding in the reciprocal ranking fusion.")]
+    """The weight of the embedding in the reciprocal ranking fusion."""
+    text_weight: Annotated[float, Field(..., description="The weight of the text in the reciprocal ranking fusion.")]
+    """The weight of the text in the reciprocal ranking fusion."""
+
+    model_config = ConfigDict(extra="ignore")

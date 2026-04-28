@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ResponseAudioTranscriptDoneEvent(BaseModel):
+    """Emitted when the full audio transcript is completed."""
+    sequence_number: Annotated[int, Field(..., description="The sequence number of this event.")]
+    """The sequence number of this event."""
+    type: Annotated[Literal["response.audio.transcript.done"], Field(..., description="The type of the event. Always `response.audio.transcript.done`. ")]
+    """The type of the event. Always `response.audio.transcript.done`. """
+
+    model_config = ConfigDict(extra="ignore")

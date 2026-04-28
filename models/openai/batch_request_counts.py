@@ -1,0 +1,19 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class BatchRequestCounts(BaseModel):
+    """The request counts for different statuses within the batch."""
+    completed: Annotated[int, Field(..., description="Number of requests that have been completed successfully.")]
+    """Number of requests that have been completed successfully."""
+    failed: Annotated[int, Field(..., description="Number of requests that have failed.")]
+    """Number of requests that have failed."""
+    total: Annotated[int, Field(..., description="Total number of requests in the batch.")]
+    """Total number of requests in the batch."""
+
+    model_config = ConfigDict(extra="ignore")

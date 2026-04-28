@@ -1,0 +1,19 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .role import Role
+from .user import User
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class UserRoleAssignment(BaseModel):
+    """Role assignment linking a user to a role."""
+    object: Annotated[Literal["user.role"], Field(..., description="Always `user.role`.")]
+    """Always `user.role`."""
+    role: Annotated[Role, Field(...)]
+    user: Annotated[User, Field(...)]
+
+    model_config = ConfigDict(extra="ignore")

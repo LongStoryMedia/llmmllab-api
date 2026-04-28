@@ -1,0 +1,15 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .model import Model
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ListModelsResponse(BaseModel):
+    data: Annotated[List[Model], Field(...)]
+    object: Annotated[Literal["list"], Field(...)]
+
+    model_config = ConfigDict(extra="ignore")

@@ -1,0 +1,16 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .tool_choice import ToolChoice
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class InferenceOptions(BaseModel):
+    """Model and tool overrides applied when generating the assistant response."""
+    model: Annotated[Union[str, Any], Field(...)]
+    tool_choice: Annotated[Union[ToolChoice, Any], Field(...)]
+
+    model_config = ConfigDict(extra="ignore")

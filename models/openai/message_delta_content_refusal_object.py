@@ -1,0 +1,18 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class MessageDeltaContentRefusalObject(BaseModel):
+    """The refusal content that is part of a message."""
+    index: Annotated[int, Field(..., description="The index of the refusal part in the message.")]
+    """The index of the refusal part in the message."""
+    refusal: Annotated[Optional[str], Field(default=None)] = None
+    type: Annotated[Literal["refusal"], Field(..., description="Always `refusal`.")]
+    """Always `refusal`."""
+
+    model_config = ConfigDict(extra="ignore")

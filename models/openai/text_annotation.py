@@ -1,0 +1,14 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .message_content_text_annotations_file_citation_object import MessageContentTextAnnotationsFileCitationObject
+from .message_content_text_annotations_file_citation_object import FileCitation
+from .message_content_text_annotations_file_path_object import MessageContentTextAnnotationsFilePathObject
+from .message_content_text_annotations_file_path_object import FilePath
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+TextAnnotation = Union[MessageContentTextAnnotationsFileCitationObject, MessageContentTextAnnotationsFilePathObject]

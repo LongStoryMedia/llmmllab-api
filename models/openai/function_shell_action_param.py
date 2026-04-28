@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class FunctionShellActionParam(BaseModel):
+    """Commands and limits describing how to run the shell tool call."""
+    commands: Annotated[List[str], Field(..., description="Ordered shell commands for the execution environment to run.")]
+    """Ordered shell commands for the execution environment to run."""
+    max_output_length: Annotated[Optional[Union[int, Any]], Field(default=None)] = None
+    timeout_ms: Annotated[Optional[Union[int, Any]], Field(default=None)] = None
+
+    model_config = ConfigDict(extra="ignore")

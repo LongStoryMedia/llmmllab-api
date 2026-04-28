@@ -1,0 +1,18 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .file_expiration_after import FileExpirationAfter
+from .file_purpose import FilePurpose
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class CreateFileRequest(BaseModel):
+    expires_after: Annotated[Optional[FileExpirationAfter], Field(default=None)] = None
+    file: Annotated[str, Field(..., description="The File object (not file name) to be uploaded. ")]
+    """The File object (not file name) to be uploaded. """
+    purpose: Annotated[FilePurpose, Field(...)]
+
+    model_config = ConfigDict(extra="ignore")

@@ -1,0 +1,14 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class TokenCountsResource(BaseModel):
+    input_tokens: Annotated[int, Field(...)]
+    object: Annotated[Literal["response.input_tokens"], Field(default='response.input_tokens')]
+
+    model_config = ConfigDict(extra="ignore")

@@ -1,0 +1,20 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class Move(BaseModel):
+    """A mouse move action.
+"""
+    type: Annotated[Literal["move"], Field(default='move', description="Specifies the event type. For a move action, this property is  always set to `move`. ")]
+    """Specifies the event type. For a move action, this property is  always set to `move`. """
+    x: Annotated[int, Field(..., description="The x-coordinate to move to. ")]
+    """The x-coordinate to move to. """
+    y: Annotated[int, Field(..., description="The y-coordinate to move to. ")]
+    """The y-coordinate to move to. """
+
+    model_config = ConfigDict(extra="ignore")

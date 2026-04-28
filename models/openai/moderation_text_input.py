@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ModerationTextInput(BaseModel):
+    """An object describing text to classify."""
+    text: Annotated[str, Field(..., description="A string of text to classify.")]
+    """A string of text to classify."""
+    type: Annotated[Literal["text"], Field(..., description="Always `text`.")]
+    """Always `text`."""
+
+    model_config = ConfigDict(extra="ignore")

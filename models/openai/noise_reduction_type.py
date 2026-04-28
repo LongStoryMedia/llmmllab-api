@@ -1,0 +1,15 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from enum import Enum
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, constr
+
+
+
+class NoiseReductionType(str, Enum):
+    """Type of noise reduction. `near_field` is for close-talking microphones such as headphones, `far_field` is for far-field microphones such as laptop or conference room microphones.
+"""
+    NEAR_FIELD = 'near_field'
+    FAR_FIELD = 'far_field'

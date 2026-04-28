@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ComputerScreenshotContent(BaseModel):
+    """A screenshot of a computer."""
+    file_id: Annotated[Union[str, Any], Field(...)]
+    image_url: Annotated[Union[str, Any], Field(...)]
+    type: Annotated[Literal["computer_screenshot"], Field(default='computer_screenshot', description="Specifies the event type. For a computer screenshot, this property is always set to `computer_screenshot`.")]
+    """Specifies the event type. For a computer screenshot, this property is always set to `computer_screenshot`."""
+
+    model_config = ConfigDict(extra="ignore")

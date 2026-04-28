@@ -1,0 +1,19 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ToolChoiceMCP(BaseModel):
+    """Use this option to force the model to call a specific tool on a remote MCP server.
+"""
+    name: Annotated[Optional[Union[str, Any]], Field(default=None)] = None
+    server_label: Annotated[str, Field(..., description="The label of the MCP server to use. ")]
+    """The label of the MCP server to use. """
+    type: Annotated[Literal["mcp"], Field(..., description="For MCP tools, the type is always `mcp`.")]
+    """For MCP tools, the type is always `mcp`."""
+
+    model_config = ConfigDict(extra="ignore")

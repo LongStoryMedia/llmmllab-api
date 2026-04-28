@@ -1,0 +1,23 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .chunking_strategy_response import ChunkingStrategyResponse
+from .other_chunking_strategy_response_param import OtherChunkingStrategyResponseParam
+from .static_chunking_strategy import StaticChunkingStrategy
+from .static_chunking_strategy_response_param import StaticChunkingStrategyResponseParam
+from .vector_store_file_attributes import VectorStoreFileAttributes
+from .vector_store_file_object import VectorStoreFileObject
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ListVectorStoreFilesResponse(BaseModel):
+    data: Annotated[List[VectorStoreFileObject], Field(...)]
+    first_id: Annotated[str, Field(...)]
+    has_more: Annotated[bool, Field(...)]
+    last_id: Annotated[str, Field(...)]
+    object: Annotated[str, Field(...)]
+
+    model_config = ConfigDict(extra="ignore")

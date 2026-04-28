@@ -1,0 +1,16 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class Screenshot(BaseModel):
+    """A screenshot action.
+"""
+    type: Annotated[Literal["screenshot"], Field(default='screenshot', description="Specifies the event type. For a screenshot action, this property is  always set to `screenshot`. ")]
+    """Specifies the event type. For a screenshot action, this property is  always set to `screenshot`. """
+
+    model_config = ConfigDict(extra="ignore")

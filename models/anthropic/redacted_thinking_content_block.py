@@ -1,0 +1,15 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class RedactedThinkingContentBlock(BaseModel):
+    """Redacted thinking block (beta)."""
+    type: Annotated[Literal["redacted_thinking"], Field(...)]
+    data: Annotated[str, Field(...)]
+
+    model_config = ConfigDict(extra="ignore")

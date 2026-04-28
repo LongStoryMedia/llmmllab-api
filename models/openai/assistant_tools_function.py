@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .function_object import FunctionObject
+from .function_parameters import FunctionParameters
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class AssistantToolsFunction(BaseModel):
+    function: Annotated[FunctionObject, Field(...)]
+    type: Annotated[Literal["function"], Field(..., description="The type of tool being defined: `function`")]
+    """The type of tool being defined: `function`"""
+
+    model_config = ConfigDict(extra="ignore")

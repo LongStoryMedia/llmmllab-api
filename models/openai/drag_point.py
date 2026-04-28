@@ -1,0 +1,17 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class DragPoint(BaseModel):
+    """An x/y coordinate pair, e.g. `{ x: 100, y: 200 }`."""
+    x: Annotated[int, Field(..., description="The x-coordinate.")]
+    """The x-coordinate."""
+    y: Annotated[int, Field(..., description="The y-coordinate.")]
+    """The y-coordinate."""
+
+    model_config = ConfigDict(extra="ignore")

@@ -1,0 +1,19 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class PublicCreateOrganizationRoleBody(BaseModel):
+    """Request payload for creating a custom role."""
+    description: Annotated[Optional[Union[str, Any]], Field(default=None, description="Optional description of the role.")] = None
+    """Optional description of the role."""
+    permissions: Annotated[List[str], Field(..., description="Permissions to grant to the role.")]
+    """Permissions to grant to the role."""
+    role_name: Annotated[str, Field(..., description="Unique name for the role.")]
+    """Unique name for the role."""
+
+    model_config = ConfigDict(extra="ignore")

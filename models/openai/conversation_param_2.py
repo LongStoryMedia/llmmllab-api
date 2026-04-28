@@ -1,0 +1,15 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ConversationParam2(BaseModel):
+    """The conversation that this response belongs to."""
+    id: Annotated[str, Field(..., description="The unique ID of the conversation.")]
+    """The unique ID of the conversation."""
+
+    model_config = ConfigDict(extra="ignore")

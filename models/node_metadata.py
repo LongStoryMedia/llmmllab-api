@@ -1,0 +1,68 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+class NodeMetadata(BaseModel):
+    """Metadata structure for workflow node execution tracking"""
+
+    node_name: Annotated[str, Field(..., description="Human-readable name of the node")]
+    """Human-readable name of the node"""
+    node_id: Annotated[
+        str, Field(..., description="Unique identifier for this specific node instance")
+    ]
+    """Unique identifier for this specific node instance"""
+    node_type: Annotated[
+        str, Field(..., description="Class name of the node for type identification")
+    ]
+    """Class name of the node for type identification"""
+    execution_time: Annotated[Optional[datetime], Field(default=None)] = None
+    user_id: Annotated[
+        Optional[str],
+        Field(
+            default=None, description="User identifier associated with this execution"
+        ),
+    ] = None
+    """User identifier associated with this execution"""
+    conversation_id: Annotated[
+        Optional[int],
+        Field(
+            default=None,
+            description="Conversation identifier for this execution context",
+        ),
+    ] = None
+    """Conversation identifier for this execution context"""
+    model_task: Annotated[
+        Optional[str],
+        Field(default=None, description="Model task type for pipeline execution"),
+    ] = None
+    """Model task type for pipeline execution"""
+    streaming: Annotated[
+        Optional[bool],
+        Field(
+            default=None, description="Whether this execution uses streaming responses"
+        ),
+    ] = None
+    """Whether this execution uses streaming responses"""
+    is_cached: Annotated[
+        Optional[bool],
+        Field(
+            default=None, description="Whether this execution uses a cached pipeline"
+        ),
+    ] = None
+    """Whether this execution uses a cached pipeline"""
+    cache_key: Annotated[
+        Optional[str],
+        Field(default=None, description="Cache key used for pipeline caching"),
+    ] = None
+    """Cache key used for pipeline caching"""
+    tool_count: Annotated[
+        Optional[int],
+        Field(default=None, description="Number of tools available or executed", ge=0),
+    ] = None
+    """Number of tools available or executed"""
+
+    model_config = ConfigDict(extra="ignore")

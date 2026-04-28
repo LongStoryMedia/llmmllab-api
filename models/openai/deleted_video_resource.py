@@ -1,0 +1,19 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class DeletedVideoResource(BaseModel):
+    """Confirmation payload returned after deleting a video."""
+    deleted: Annotated[bool, Field(..., description="Indicates that the video resource was deleted.")]
+    """Indicates that the video resource was deleted."""
+    id: Annotated[str, Field(..., description="Identifier of the deleted video.")]
+    """Identifier of the deleted video."""
+    object: Annotated[Literal["video.deleted"], Field(default='video.deleted', description="The object type that signals the deletion response.")]
+    """The object type that signals the deletion response."""
+
+    model_config = ConfigDict(extra="ignore")

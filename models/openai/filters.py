@@ -1,0 +1,13 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .comparison_filter import ComparisonFilter
+from .comparison_filter_value_items import ComparisonFilterValueItems
+from .compound_filter import CompoundFilter
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+Filters = Union[ComparisonFilter, CompoundFilter]

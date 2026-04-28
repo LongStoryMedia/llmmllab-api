@@ -1,0 +1,12 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .assistants_named_tool_choice import AssistantsNamedToolChoice
+from .assistants_named_tool_choice import Function
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+AssistantsApiToolChoiceOption = Union[Literal["none", "auto", "required"], AssistantsNamedToolChoice]

@@ -1,0 +1,16 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ChatCompletionFunctionCallOption(BaseModel):
+    """Specifying a particular function via `{"name": "my_function"}` forces the model to call that function.
+"""
+    name: Annotated[str, Field(..., description="The name of the function to call.")]
+    """The name of the function to call."""
+
+    model_config = ConfigDict(extra="ignore")

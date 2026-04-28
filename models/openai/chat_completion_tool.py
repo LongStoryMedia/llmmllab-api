@@ -1,0 +1,19 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from .function_object import FunctionObject
+from .function_parameters import FunctionParameters
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class ChatCompletionTool(BaseModel):
+    """A function tool that can be used to generate a response.
+"""
+    function: Annotated[FunctionObject, Field(...)]
+    type: Annotated[Literal["function"], Field(..., description="The type of the tool. Currently, only `function` is supported.")]
+    """The type of the tool. Currently, only `function` is supported."""
+
+    model_config = ConfigDict(extra="ignore")

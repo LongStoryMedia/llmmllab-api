@@ -1,0 +1,21 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from enum import Enum
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, constr
+
+
+
+class RunStatus(str, Enum):
+    """The status of the run, which can be either `queued`, `in_progress`, `requires_action`, `cancelling`, `cancelled`, `failed`, `completed`, `incomplete`, or `expired`."""
+    QUEUED = 'queued'
+    IN_PROGRESS = 'in_progress'
+    REQUIRES_ACTION = 'requires_action'
+    CANCELLING = 'cancelling'
+    CANCELLED = 'cancelled'
+    FAILED = 'failed'
+    COMPLETED = 'completed'
+    INCOMPLETE = 'incomplete'
+    EXPIRED = 'expired'

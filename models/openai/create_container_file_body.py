@@ -1,0 +1,16 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class CreateContainerFileBody(BaseModel):
+    file: Annotated[Optional[str], Field(default=None, description="The File object (not file name) to be uploaded. ")] = None
+    """The File object (not file name) to be uploaded. """
+    file_id: Annotated[Optional[str], Field(default=None, description="Name of the file to create.")] = None
+    """Name of the file to create."""
+
+    model_config = ConfigDict(extra="ignore")

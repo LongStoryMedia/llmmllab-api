@@ -1,0 +1,15 @@
+
+
+from __future__ import annotations
+from typing import List, Dict, Optional, Any, Union, Annotated, Literal
+from datetime import datetime, date, time, timedelta
+from pydantic import BaseModel, ConfigDict, Field, AnyUrl, EmailStr, conint, confloat
+
+
+
+class TextContent(BaseModel):
+    """A text content."""
+    text: Annotated[str, Field(...)]
+    type: Annotated[Literal["text"], Field(default='text')]
+
+    model_config = ConfigDict(extra="ignore")
