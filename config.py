@@ -26,7 +26,7 @@ DB_HOST = os.environ.get("DB_HOST", "localhost")
 DB_PORT = int(os.environ.get("DB_PORT", "5432"))
 DB_USER = os.environ.get("DB_USER", "postgres")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-DB_NAME = os.environ.get("DB_NAME", "llmmll")
+DB_NAME = os.environ.get("DB_NAME", "llmmllab")
 DB_SSLMODE = os.environ.get("DB_SSLMODE", "disable")
 DB_CONNECTION_STRING = os.environ.get(
     "DB_CONNECTION_STRING",
@@ -59,6 +59,7 @@ IMAGE_DIR = os.environ.get("IMAGE_DIR", "/root/images")
 IMAGE_RETENTION_HOURS = int(os.environ.get("IMAGE_RETENTION_HOURS", "24"))
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app/config")
 HF_HOME = os.environ.get("HF_HOME", "/root/.cache/huggingface")
+MODELS_FILE_PATH = os.environ.get("MODELS_FILE_PATH", "")
 
 # ── Runner / llama.cpp ───────────────────────────────────────────────
 LLAMA_SERVER_EXECUTABLE = os.environ.get(
@@ -87,3 +88,6 @@ ENABLE_TOOL_CONTINUATION = (
 
 # ── PyTorch ──────────────────────────────────────────────────────────
 os.environ.setdefault("PYTORCH_NO_CUDA_MEMORY_CACHING", "1")
+
+# ── Runner service ─────────────────────────────────────────────────────
+RUNNER_ENDPOINTS = os.environ.get("RUNNER_ENDPOINTS", "http://localhost:8001").split(",")
