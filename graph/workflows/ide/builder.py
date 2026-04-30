@@ -155,6 +155,7 @@ class IdeGraphBuilder(GraphBuilder):
                 base_url=server_handle.base_url,
                 api_key=SecretStr("none"),
                 model=model_def.name,
+                stream_usage=True,
             )
             self._server_handle = server_handle
 

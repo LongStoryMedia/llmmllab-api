@@ -48,12 +48,23 @@ _SERVER_TOOL_BLOCK_TYPES = frozenset(
     }
 )
 
+# Thinking blocks returned by the API that clients echo back on subsequent
+# turns.  Local models don't use these so we strip them before validation.
+_THINKING_BLOCK_TYPES = frozenset(
+    {
+        "thinking",
+        "redacted_thinking",
+    }
+)
+
 
 def _strip_server_tool_blocks(req_body: Dict[str, Any]) -> Dict[str, Any]:
-    """Remove server-tool content blocks that the client echoed back."""
+    """Remove server-tool and thinking content blocks that the client echoed back."""
     messages = req_body.get("messages")
     if not messages:
         return req_body
+
+    strip_types = _SERVER_TOOL_BLOCK_TYPES | _THINKING_BLOCK_TYPES
 
     for msg in messages:
         content = msg.get("content")
@@ -64,12 +75,12 @@ def _strip_server_tool_blocks(req_body: Dict[str, Any]) -> Dict[str, Any]:
             for block in content
             if not (
                 isinstance(block, dict)
-                and block.get("type") in _SERVER_TOOL_BLOCK_TYPES
+                and block.get("type") in strip_types
             )
         ]
         if not filtered:
             # Don't leave an empty content list — replace with placeholder text.
-            filtered = [{"type": "text", "text": "(server tool results omitted)"}]
+            filtered = [{"type": "text", "text": "(content omitted)"}]
         msg["content"] = filtered
 
     return req_body
@@ -263,9 +274,7 @@ def anthropic_response_from_chat_response(
             )
 
     usage = Usage(
-        input_tokens=TokenService.scale_tokens(
-            int(chat_response.prompt_eval_count or 0)
-        ),
+        input_tokens=int(chat_response.prompt_eval_count or 0),
         output_tokens=int(chat_response.eval_count or 0),
     )
 
@@ -314,9 +323,8 @@ async def stream_message(
 
     msg_id = f"msg_{uuid.uuid4().hex[:24]}"
 
-    # Pre-compute input tokens — scale to Claude's 200K window
-    raw_input_tokens = await TokenService.count_input_tokens(messages, client_tools)
-    input_tokens = TokenService.scale_tokens(raw_input_tokens)
+    # Pre-compute input token estimate
+    input_tokens = await TokenService.count_input_tokens(messages, client_tools)
 
     yield _sse(
         "message_start",
@@ -401,9 +409,7 @@ async def stream_message(
             # ---- ChatResponse events ----
             if event.done:
                 if event.prompt_eval_count:
-                    input_tokens = TokenService.scale_tokens(
-                        int(event.prompt_eval_count)
-                    )
+                    input_tokens = int(event.prompt_eval_count)
                 if event.eval_count:
                     output_tokens = int(event.eval_count)
                 continue
@@ -534,7 +540,12 @@ async def stream_message(
             {"type": "content_block_stop", "index": block_index},
         )
 
-    stop_reason = "tool_use" if acc.has_tool_calls else "end_turn"
+    if acc.has_tool_calls:
+        stop_reason = "tool_use"
+    elif acc.finish_reason == "length":
+        stop_reason = "max_tokens"
+    else:
+        stop_reason = "end_turn"
     logger.debug(
         "Stream complete",
         extra={
@@ -542,6 +553,7 @@ async def stream_message(
             "has_tool_calls": acc.has_tool_calls,
             "final_content_len": len(acc.final_content),
             "stop_reason": stop_reason,
+            "finish_reason": acc.finish_reason,
             "text_block_started": text_block_started,
         },
     )
@@ -674,7 +686,7 @@ async def countTokens(
     try:
         internal_messages = messages_from_anthropic(body.messages, system=body.system)
         raw_count = await TokenService.count_input_tokens(internal_messages, body.tools)
-        return CountTokensResponse(input_tokens=TokenService.scale_tokens(raw_count))
+        return CountTokensResponse(input_tokens=raw_count)
 
     except Exception as e:
         logger.error(f"Error in countTokens: {e}")

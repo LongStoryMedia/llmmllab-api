@@ -180,6 +180,9 @@ class WorkflowExecutor:
         # Track the model's actual finish reason (stop, tool_calls, length, etc.)
         # so the completion service can distinguish natural stops from truncations.
         model_finish_reason: str = "complete"
+        # Track token usage reported by the model
+        prompt_eval_count: int = 0
+        eval_count: int = 0
         # Track how many server_tool_events we've already yielded to avoid
         # duplicates (the state field accumulates via operator.add).
         server_tool_events_yielded = 0
@@ -471,12 +474,25 @@ class WorkflowExecutor:
                         if reason == "tool_calls":
                             reason = "tool_call"
                         model_finish_reason = reason
+
+                        # Extract token usage from LangChain response metadata
+                        token_usage = md.get("token_usage") or {}
+                        if token_usage:
+                            prompt_eval_count = int(
+                                token_usage.get("prompt_tokens", 0)
+                            )
+                            eval_count = int(
+                                token_usage.get("completion_tokens", 0)
+                            )
+
                         self.logger.debug(
                             "Model generation completed",
                             extra={
                                 "finish_reason": reason,
                                 "has_tool_calls": has_end_tc,
                                 "content_len": len(contents_buffer),
+                                "prompt_tokens": prompt_eval_count,
+                                "completion_tokens": eval_count,
                             },
                         )
 
@@ -636,6 +652,8 @@ class WorkflowExecutor:
             message=final_message,
             done=True,
             finish_reason=model_finish_reason,
+            prompt_eval_count=prompt_eval_count or None,
+            eval_count=eval_count or None,
             total_duration=(datetime.now(timezone.utc) - start_time).total_seconds()
             * 1000.0,
         )

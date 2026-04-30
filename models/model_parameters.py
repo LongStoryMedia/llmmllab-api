@@ -55,5 +55,7 @@ class ModelParameters(BaseModel):
     """Reasoning effort level for chain-of-thought processing"""
     flash_attention: Annotated[Optional[bool], Field(default=True, description="Enable flash attention optimization for memory efficiency")] = True
     """Enable flash attention optimization for memory efficiency"""
+    parallel: Annotated[Optional[int], Field(default=None, description="Number of parallel request slots (llama.cpp --parallel). Defaults to 1 for large context models.", ge=1)] = None
+    """Number of parallel request slots (llama.cpp --parallel). Defaults to 1 for large context models."""
 
     model_config = ConfigDict(extra="ignore")

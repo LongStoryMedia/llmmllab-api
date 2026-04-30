@@ -5,7 +5,7 @@ from models.message import Message, MessageContentType
 from utils.logging import llmmllogger
 
 logger = llmmllogger.bind(component="token_service")
-_CLAUDE_ASSUMED_CONTEXT = 200_000
+
 
 class TokenService:
     @staticmethod
@@ -23,14 +23,6 @@ class TokenService:
         except Exception:
             pass
         return 131_072
-
-    @staticmethod
-    def scale_tokens(actual: int, assumed_context: int = _CLAUDE_ASSUMED_CONTEXT) -> int:
-        num_ctx = 131_072  # default, callers should override via get_num_ctx
-        effective_ctx = int(num_ctx * 0.90)
-        if effective_ctx >= assumed_context:
-            return actual
-        return int(actual * assumed_context / effective_ctx)
 
     @staticmethod
     async def count_input_tokens(
