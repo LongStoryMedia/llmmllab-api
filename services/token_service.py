@@ -36,7 +36,8 @@ class TokenService:
             text = ""
             if msg.content:
                 text = " ".join(
-                    c.text for c in msg.content
+                    c.text
+                    for c in msg.content
                     if c.type == MessageContentType.TEXT and c.text
                 )
             parts.append(f"<|{role_tag}|>\n{text}")

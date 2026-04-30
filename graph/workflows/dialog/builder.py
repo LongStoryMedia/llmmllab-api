@@ -119,6 +119,7 @@ class DialogGraphBuilder(GraphBuilder):
                 api_key=SecretStr("none"),
                 model=primary_model_def.name,
                 stream_usage=True,
+                max_retries=0,
             )
             embedding_model = OpenAIEmbeddings(
                 base_url=embedding_handle.base_url,

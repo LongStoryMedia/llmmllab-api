@@ -73,10 +73,7 @@ def _strip_server_tool_blocks(req_body: Dict[str, Any]) -> Dict[str, Any]:
         filtered = [
             block
             for block in content
-            if not (
-                isinstance(block, dict)
-                and block.get("type") in strip_types
-            )
+            if not (isinstance(block, dict) and block.get("type") in strip_types)
         ]
         if not filtered:
             # Don't leave an empty content list — replace with placeholder text.
@@ -584,7 +581,7 @@ async def createMessage(
         internal_messages = messages_from_anthropic(body.messages, system=body.system)
         claude_regex = regex.compile(r"claude|haiku|sonnet|opus", regex.IGNORECASE)
         if claude_regex.search(body.model):
-            body.model = "Qwen3_6_35B_A3B"
+            body.model = "Qwen3_6_27B"
 
         client_tools = None
         tool_choice = None

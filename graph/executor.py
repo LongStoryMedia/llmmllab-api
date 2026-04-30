@@ -478,12 +478,8 @@ class WorkflowExecutor:
                         # Extract token usage from LangChain response metadata
                         token_usage = md.get("token_usage") or {}
                         if token_usage:
-                            prompt_eval_count = int(
-                                token_usage.get("prompt_tokens", 0)
-                            )
-                            eval_count = int(
-                                token_usage.get("completion_tokens", 0)
-                            )
+                            prompt_eval_count = int(token_usage.get("prompt_tokens", 0))
+                            eval_count = int(token_usage.get("completion_tokens", 0))
 
                         self.logger.debug(
                             "Model generation completed",

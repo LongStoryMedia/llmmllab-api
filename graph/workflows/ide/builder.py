@@ -129,7 +129,11 @@ class IdeGraphBuilder(GraphBuilder):
             if model_name:
                 all_models = await runner_client.list_models()
                 model_def = next(
-                    (m for m in all_models if m.name == model_name or m.id == model_name),
+                    (
+                        m
+                        for m in all_models
+                        if m.name == model_name or m.id == model_name
+                    ),
                     None,
                 )
                 if not model_def:
@@ -156,6 +160,7 @@ class IdeGraphBuilder(GraphBuilder):
                 api_key=SecretStr("none"),
                 model=model_def.name,
                 stream_usage=True,
+                max_retries=0,
             )
             self._server_handle = server_handle
 
