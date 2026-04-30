@@ -16,7 +16,7 @@ from models.document import Document
 from utils.logging import llmmllogger
 from utils.text_extraction import extract_text_content, get_file_metadata
 from middleware.auth import get_user_id
-from db import storage
+from services import document_service, memory_service
 
 logger = llmmllogger.bind(component="document_router")
 
@@ -44,7 +44,7 @@ async def upload_document(
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    if not storage.initialized or not storage.document:
+    if not document_service.available:
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
     try:
@@ -61,7 +61,7 @@ async def upload_document(
         text_content = extract_text_content(content_base64, content_type, filename)
 
         # Store the document
-        document = await storage.document.store_document(
+        document = await document_service.store_document(
             message_id=conversation_id,
             user_id=user_id,
             filename=filename,
@@ -73,7 +73,7 @@ async def upload_document(
 
         # Create memory embedding if we have text content and embedding service
         # TODO: Add embedding service integration when available
-        if text_content and storage.memory:
+        if text_content and memory_service.available:
             try:
                 # Get file metadata for context
                 metadata = get_file_metadata(filename, content_type, file_size)
@@ -132,10 +132,10 @@ async def get_document(
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    if not storage.initialized or not storage.document:
+    if not document_service.available:
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
-    document = await storage.document.get_document(document_id)
+    document = await document_service.get_document(document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
     return document
@@ -151,10 +151,10 @@ async def download_document(
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    if not storage.initialized or not storage.document:
+    if not document_service.available:
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
-    document = await storage.document.get_document(document_id)
+    document = await document_service.get_document(document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -186,8 +186,8 @@ async def get_conversation_documents(
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    if not storage.initialized or not storage.document:
+    if not document_service.available:
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
-    documents = await storage.document.get_documents_for_conversation(conversation_id)
+    documents = await document_service.get_documents_for_conversation(conversation_id)
     return documents

@@ -20,12 +20,11 @@ class WorkFlowType(StrEnum):
 async def get_builder(workflow_type: WorkFlowType, user_id: str) -> GraphBuilder:
     """Factory function to get the appropriate workflow builder based on type."""
 
-    # 1. Get user configuration from shared data layer
+    # 1. Get user configuration from service layer
+    from services import user_config_service  # pylint: disable=import-outside-toplevel
     from db import storage  # pylint: disable=import-outside-toplevel
 
-    user_config = await storage.get_service(storage.user_config).get_user_config(
-        user_id
-    )
+    user_config = await user_config_service.get_user_config(user_id)
 
     if workflow_type == WorkFlowType.IDE:
         return IdeGraphBuilder(storage, user_config)

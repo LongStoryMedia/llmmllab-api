@@ -11,7 +11,7 @@ from typing import (
 )
 from pydantic import BaseModel, Field
 
-from core.errors import NodeExecutionError
+from graph.errors import NodeExecutionError
 from agents.base import BaseAgent
 from models import (
     MessageRole,

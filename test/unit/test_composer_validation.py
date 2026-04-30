@@ -169,7 +169,7 @@ class TestComposerIntegrationValidation:
         # If any circular imports or missing modules exist, the test imports at the top would fail.
 
         # Test some key import chains that were potentially problematic
-        from core.service import ComposerService
+        from graph.service import ComposerService
         from graph.builder import GraphBuilder
         from models import Message, LangGraphState
 
@@ -183,9 +183,8 @@ class TestComposerIntegrationValidation:
         # If this test runs successfully, it means the module loading
         # completed without circular import errors
         import composer_init as composer
-        import core
-        import nodes
         import graph
+        import nodes
         import models
 
         # All imports should succeed
@@ -204,7 +203,7 @@ class TestComposerIntegrationValidation:
     def test_langgraph_architecture_compliance(self):
         """Test that the implementation follows LangGraph V1 Alpha architecture."""
         # Test that core LangGraph components are properly integrated
-        from core.service import CompiledStateGraph
+        from graph.service import CompiledStateGraph
         from graph.builder import GraphBuilder
 
         # These should be compatible with LangGraph patterns

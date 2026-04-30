@@ -6,7 +6,7 @@ Todo router for handling user todo list management.
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Request
 
-from db import storage
+from services import todo_service
 from middleware.auth import get_user_id
 from models.todo_item import TodoItem
 
@@ -21,7 +21,7 @@ async def create_todo(todo: TodoItem, request: Request):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        return await storage.get_service(storage.todo).add_todo(todo)
+        return await todo_service.add_todo(todo)
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error creating todo: {str(e)}"
@@ -37,11 +37,11 @@ async def get_todos(request: Request, status: Optional[str] = None):
 
     try:
         if status:
-            todos = await storage.get_service(storage.todo).get_todos_by_status(
+            todos = await todo_service.get_todos_by_status(
                 user_id, status
             )
         else:
-            todos = await storage.get_service(storage.todo).get_todos_by_user(user_id)
+            todos = await todo_service.get_todos_by_user(user_id)
 
         return todos
     except Exception as e:
@@ -58,7 +58,7 @@ async def get_todo(request: Request, todo_id: int):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        todo = await storage.get_service(storage.todo).get_todo_by_id(todo_id, user_id)
+        todo = await todo_service.get_todo_by_id(todo_id, user_id)
 
         if not todo:
             raise HTTPException(status_code=404, detail="Todo item not found")
@@ -81,7 +81,7 @@ async def update_todo(todo: TodoItem, request: Request):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        return await storage.get_service(storage.todo).update_todo(todo)
+        return await todo_service.update_todo(todo)
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error updating todo: {str(e)}"
@@ -96,7 +96,7 @@ async def delete_todo(request: Request, todo_id: int):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        success = await storage.get_service(storage.todo).delete_todo(todo_id, user_id)
+        success = await todo_service.delete_todo(todo_id, user_id)
 
         if not success:
             raise HTTPException(status_code=404, detail="Todo item not found")
@@ -118,7 +118,7 @@ async def get_todos_by_conversation(request: Request, conversation_id: int):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        todos = await storage.get_service(storage.todo).get_todos_by_conversation(
+        todos = await todo_service.get_todos_by_conversation(
             user_id, conversation_id
         )
         return todos
@@ -136,7 +136,7 @@ async def get_todos_by_status(request: Request, status: str):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        return await storage.get_service(storage.todo).get_todos_by_status(
+        return await todo_service.get_todos_by_status(
             user_id, status
         )
     except Exception as e:

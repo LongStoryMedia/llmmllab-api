@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from middleware.auth import get_request_id, get_user_id, is_admin
-from db import storage
+from services import message_service
 from models import (
     MessageRole,
     ChatResponse,
@@ -63,7 +63,7 @@ async def composer_chat_completion(
                 },
             )
         if event.finish_reason == "complete" and event.message:
-            message_id = await storage.get_service(storage.message).add_message(
+            message_id = await message_service.add_message(
                 event.message
             )
             logger.info(
@@ -110,7 +110,7 @@ async def chat_completion(
         # Transform file content to documents before storing
         msg = await transform_file_content_to_documents(msg, user_id)
 
-        await storage.get_service(storage.message).add_message(msg)
+        await message_service.add_message(msg)
         return StreamingResponse(
             composer_chat_completion(user_id, msg.conversation_id, request_id, body.model_name),  # type: ignore
             media_type="application/json",

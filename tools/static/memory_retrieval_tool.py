@@ -27,8 +27,8 @@ from langchain.tools import ToolRuntime
 
 from graph.state import WorkflowState
 from services.runner_client import runner_client
+from services import memory_service as memory_svc
 from langchain_openai import OpenAIEmbeddings
-from db import storage
 from models import ModelTask
 from models.default_configs import DEFAULT_MEMORY_CONFIG
 from utils.logging import llmmllogger
@@ -86,7 +86,7 @@ async def memory_retrieval(
             return error_message
 
         # Initialize storage if not done
-        if not storage.pool:
+        if not memory_svc.available:
             error_message = "❌ Memory retrieval failed: Database not initialized"
             return error_message
 
@@ -118,7 +118,6 @@ async def memory_retrieval(
             query_embeddings = [[0.1] * 768]  # Fallback mock embedding
 
         # Retrieve similar memories from storage using configuration
-        memory_service = storage.get_service(storage.memory)
 
         # Configure user and conversation filtering based on memory config
         user_filter = None if memory_config.enable_cross_user else state["user_id"]
@@ -128,7 +127,7 @@ async def memory_retrieval(
             else state["conversation_id"]
         )
 
-        memories = await memory_service.search_similarity(
+        memories = await memory_svc.search_similarity(
             embeddings=query_embeddings,
             min_similarity=memory_config.similarity_threshold,
             limit=memory_config.limit,

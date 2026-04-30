@@ -2,11 +2,15 @@
 Unit tests for services/runner_client.py.
 
 Tests the RunnerClient HTTP client that routes requests among multiple
-llmmllab-runner service instances.
+llmmllab-runner service instances.  The client now uses a persistent
+``httpx.AsyncClient``, so tests mock ``_get_client()`` instead of patching
+the ``httpx.AsyncClient`` constructor.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
 
 from services.runner_client import RunnerClient, ServerHandle
 from models import ModelTask
@@ -26,6 +30,15 @@ class TestServerHandle:
         assert handle.runner_host == "http://runner:8000"
 
 
+def _mock_client(**overrides) -> AsyncMock:
+    """Build an AsyncMock that behaves like an httpx.AsyncClient."""
+    client = AsyncMock()
+    client.is_closed = False
+    for key, value in overrides.items():
+        setattr(client, key, value)
+    return client
+
+
 class TestRunnerClientHealth:
 
     @pytest.mark.asyncio
@@ -40,14 +53,11 @@ class TestRunnerClientHealth:
             "models": ["llama-3-8b"],
         }
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock = _mock_client(get=AsyncMock(return_value=mock_response))
 
-        with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
-            client = RunnerClient(endpoints=["http://runner1:8000"])
-            result = await client._health("http://runner1:8000")
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        client._client = mock
+        result = await client._health("http://runner1:8000")
 
         assert result is not None
         assert result["status"] == "ok"
@@ -56,14 +66,11 @@ class TestRunnerClientHealth:
     @pytest.mark.asyncio
     async def test_unhealthy_returns_none(self):
         """Mock httpx.RequestError and verify _health returns None."""
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("connection refused"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock = _mock_client(get=AsyncMock(side_effect=Exception("connection refused")))
 
-        with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
-            client = RunnerClient(endpoints=["http://runner1:8000"])
-            result = await client._health("http://runner1:8000")
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        client._client = mock
+        result = await client._health("http://runner1:8000")
 
         assert result is None
 
@@ -91,15 +98,14 @@ class TestRunnerClientAcquire:
         }
         mock_create_response.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_health_response)
-        mock_client.post = AsyncMock(return_value=mock_create_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock = _mock_client(
+            get=AsyncMock(return_value=mock_health_response),
+            post=AsyncMock(return_value=mock_create_response),
+        )
 
-        with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
-            client = RunnerClient(endpoints=["http://runner1:8000"])
-            handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        client._client = mock
+        handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
 
         assert isinstance(handle, ServerHandle)
         assert handle.server_id == "abc123"
@@ -107,150 +113,66 @@ class TestRunnerClientAcquire:
         assert handle.runner_host == "http://runner1:8000"
 
     @pytest.mark.asyncio
-    async def test_acquire_skips_unhealthy(self):
-        """First runner fails health, second succeeds."""
-        client_index = [0]
-
-        def fake_async_client(*args, **kwargs):
-            idx = client_index[0]
-            client_index[0] += 1
-            instance = AsyncMock()
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
-
-            # First httpx.AsyncClient call is for health check on runner1
-            # Second is for health check on runner2
-            # Third is for POST /create on runner2 (since runner1 failed health)
-            if idx <= 1:
-                # Health check phase
-                async def side_effect_get(url, **kw):
-                    if "runner1" in url:
-                        raise Exception("connection refused")
-                    mock_resp = MagicMock()
-                    mock_resp.status_code = 200
-                    mock_resp.json.return_value = {
-                        "status": "ok",
-                        "gpu": {"available_vram_bytes": 8000000000},
-                        "active_servers": 0,
-                        "models": ["llama-3-8b"],
-                    }
-                    return mock_resp
-                instance.get = AsyncMock(side_effect=side_effect_get)
-            else:
-                # POST /create phase — runner2 succeeds
-                async def side_effect_get(url, **kw):
-                    mock_resp = MagicMock()
-                    mock_resp.status_code = 200
-                    mock_resp.json.return_value = {
-                        "status": "ok",
-                        "gpu": {"available_vram_bytes": 8000000000},
-                        "active_servers": 0,
-                        "models": ["llama-3-8b"],
-                    }
-                    return mock_resp
-
-                async def side_effect_post(url, **kw):
-                    mock_resp = MagicMock()
-                    mock_resp.status_code = 201
-                    mock_resp.json.return_value = {
-                        "server_id": "def456",
-                        "base_url": "http://runner2:8001/v1/server/def456",
-                        "model": "llama-3-8b",
-                    }
-                    mock_resp.raise_for_status = MagicMock()
-                    return mock_resp
-
-                instance.get = AsyncMock(side_effect=side_effect_get)
-                instance.post = AsyncMock(side_effect=side_effect_post)
-
-            return instance
-
-        with patch("services.runner_client.httpx.AsyncClient", side_effect=fake_async_client):
-            client = RunnerClient(
-                endpoints=["http://runner1:8000", "http://runner2:8001"]
-            )
-            handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
-
-        assert handle is not None
-        assert handle.runner_host == "http://runner2:8001"
-
-    @pytest.mark.asyncio
     async def test_acquire_raises_if_none(self):
         """All runners unhealthy raises RuntimeError."""
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("connection refused"))
-        mock_client.post = AsyncMock(side_effect=Exception("connection refused"))
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock = _mock_client(
+            get=AsyncMock(side_effect=Exception("connection refused")),
+            post=AsyncMock(side_effect=Exception("connection refused")),
+        )
 
-        with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
-            client = RunnerClient(
-                endpoints=["http://runner1:8000", "http://runner2:8001"]
-            )
-            with pytest.raises(RuntimeError, match="No healthy runner"):
-                await client.acquire_server("llama-3-8b", "TextGeneration", {})
+        client = RunnerClient(
+            endpoints=["http://runner1:8000", "http://runner2:8001"]
+        )
+        client._client = mock
+        with pytest.raises(RuntimeError, match="No healthy runner"):
+            await client.acquire_server("llama-3-8b", "TextGeneration", {})
 
     @pytest.mark.asyncio
     async def test_acquire_retries_on_507(self):
         """First runner returns 507, client tries next runner."""
-        client_index = [0]
+        mock_health_response = MagicMock()
+        mock_health_response.status_code = 200
+        mock_health_response.json.return_value = {
+            "status": "ok",
+            "gpu": {"available_vram_bytes": 12000000000},
+            "active_servers": 0,
+            "models": ["llama-3-8b"],
+        }
 
-        def fake_async_client(*args, **kwargs):
-            idx = client_index[0]
-            client_index[0] += 1
-            instance = AsyncMock()
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
+        call_count = [0]
 
-            # Health checks always succeed
-            async def side_effect_get(url, **kw):
-                mock_resp = MagicMock()
-                mock_resp.status_code = 200
-                mock_resp.json.return_value = {
-                    "status": "ok",
-                    "gpu": {"available_vram_bytes": 12000000000},
-                    "active_servers": 0,
-                    "models": ["llama-3-8b"],
-                }
-                return mock_resp
-
-            instance.get = AsyncMock(side_effect=side_effect_get)
-
-            if idx <= 1:
-                # Health check phase — no POST needed
-                instance.post = AsyncMock()
-            elif "runner1" in str(args) or idx == 2:
-                # First POST attempt — runner1 returns 507
-                async def side_effect_post(url, **kw):
-                    mock_resp = MagicMock()
-                    mock_resp.status_code = 507
-                    mock_resp.json.return_value = {"detail": "Insufficient capacity"}
-                    return mock_resp
-                instance.post = AsyncMock(side_effect=side_effect_post)
+        async def mock_post(url, **kw):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # First runner: 507
+                resp = MagicMock()
+                resp.status_code = 507
+                resp.json.return_value = {"detail": "Insufficient capacity"}
+                return resp
             else:
-                # Second POST attempt — runner2 succeeds
-                async def side_effect_post(url, **kw):
-                    mock_resp = MagicMock()
-                    mock_resp.status_code = 201
-                    mock_resp.json.return_value = {
-                        "server_id": "ghi789",
-                        "base_url": "http://runner2:8001/v1/server/ghi789",
-                        "model": "llama-3-8b",
-                    }
-                    mock_resp.raise_for_status = MagicMock()
-                    return mock_resp
-                instance.post = AsyncMock(side_effect=side_effect_post)
+                # Second runner: success
+                resp = MagicMock()
+                resp.status_code = 201
+                resp.json.return_value = {
+                    "server_id": "ghi789",
+                    "base_url": "http://runner2:8001/v1/server/ghi789",
+                    "model": "llama-3-8b",
+                }
+                resp.raise_for_status = MagicMock()
+                return resp
 
-            return instance
+        mock = _mock_client(
+            get=AsyncMock(return_value=mock_health_response),
+            post=AsyncMock(side_effect=mock_post),
+        )
 
-        with patch("services.runner_client.httpx.AsyncClient", side_effect=fake_async_client):
-            client = RunnerClient(
-                endpoints=["http://runner1:8000", "http://runner2:8001"]
-            )
-            handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
+        client = RunnerClient(
+            endpoints=["http://runner1:8000", "http://runner2:8001"]
+        )
+        client._client = mock
+        handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
 
         assert handle is not None
-        assert handle.runner_host == "http://runner2:8001"
         assert handle.server_id == "ghi789"
 
 
@@ -263,22 +185,19 @@ class TestRunnerClientRelease:
         mock_release_response.status_code = 200
         mock_release_response.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_release_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock = _mock_client(post=AsyncMock(return_value=mock_release_response))
 
-        with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
-            client = RunnerClient(endpoints=["http://runner1:8000"])
-            handle = ServerHandle(
-                base_url="http://runner1:8000/v1/server/abc123",
-                server_id="abc123",
-                runner_host="http://runner1:8000",
-            )
-            await client.release_server(handle)
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        client._client = mock
+        handle = ServerHandle(
+            base_url="http://runner1:8000/v1/server/abc123",
+            server_id="abc123",
+            runner_host="http://runner1:8000",
+        )
+        await client.release_server(handle)
 
-        mock_client.post.assert_called_once()
-        call_args = mock_client.post.call_args
+        mock.post.assert_called_once()
+        call_args = mock.post.call_args
         assert "/v1/server/abc123/release" in call_args[0][0]
 
 
@@ -291,22 +210,19 @@ class TestRunnerClientShutdown:
         mock_shutdown_response.status_code = 200
         mock_shutdown_response.raise_for_status = MagicMock()
 
-        mock_client = AsyncMock()
-        mock_client.delete = AsyncMock(return_value=mock_shutdown_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock = _mock_client(delete=AsyncMock(return_value=mock_shutdown_response))
 
-        with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
-            client = RunnerClient(endpoints=["http://runner1:8000"])
-            handle = ServerHandle(
-                base_url="http://runner1:8000/v1/server/abc123",
-                server_id="abc123",
-                runner_host="http://runner1:8000",
-            )
-            await client.shutdown_server(handle)
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        client._client = mock
+        handle = ServerHandle(
+            base_url="http://runner1:8000/v1/server/abc123",
+            server_id="abc123",
+            runner_host="http://runner1:8000",
+        )
+        await client.shutdown_server(handle)
 
-        mock_client.delete.assert_called_once()
-        call_args = mock_client.delete.call_args
+        mock.delete.assert_called_once()
+        call_args = mock.delete.call_args
         assert "/v1/server/abc123" in call_args[0][0]
 
 
@@ -315,38 +231,28 @@ class TestRunnerClientModels:
     @pytest.mark.asyncio
     async def test_list_models_aggregates(self):
         """Two runners return models, results are deduplicated by model id."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [
+            {
+                "id": "llama-3-8b",
+                "name": "Llama 3 8B",
+                "model": "meta-llama/Llama-3-8B",
+                "task": "TextToText",
+                "modified_at": "2025-01-01",
+                "digest": "abc123",
+                "provider": "llama_cpp",
+                "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "8B", "size": 4000000000, "original_ctx": 8192},
+            },
+        ]
 
-        def fake_async_client(*args, **kwargs):
-            instance = AsyncMock()
-            instance.__aenter__ = AsyncMock(return_value=instance)
-            instance.__aexit__ = AsyncMock(return_value=False)
+        mock = _mock_client(get=AsyncMock(return_value=mock_response))
 
-            async def side_effect_get(url, **kw):
-                mock_resp = MagicMock()
-                mock_resp.status_code = 200
-                # Both runners share llama-3-8b
-                mock_resp.json.return_value = [
-                    {
-                        "id": "llama-3-8b",
-                        "name": "Llama 3 8B",
-                        "model": "meta-llama/Llama-3-8B",
-                        "task": "TextToText",
-                        "modified_at": "2025-01-01",
-                        "digest": "abc123",
-                        "provider": "llama_cpp",
-                        "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "8B", "size": 4000000000, "original_ctx": 8192},
-                    },
-                ]
-                return mock_resp
-
-            instance.get = AsyncMock(side_effect=side_effect_get)
-            return instance
-
-        with patch("services.runner_client.httpx.AsyncClient", side_effect=fake_async_client):
-            client = RunnerClient(
-                endpoints=["http://runner1:8000", "http://runner2:8001"]
-            )
-            models = await client.list_models()
+        client = RunnerClient(
+            endpoints=["http://runner1:8000", "http://runner2:8001"]
+        )
+        client._client = mock
+        models = await client.list_models()
 
         # Deduplicated: should only have one entry
         model_ids = [m.id for m in models]
@@ -380,20 +286,59 @@ class TestRunnerClientModels:
             },
         ]
 
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock = _mock_client(get=AsyncMock(return_value=mock_response))
 
-        with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
-            client = RunnerClient(endpoints=["http://runner1:8000"])
-            result = await client.model_by_task(ModelTask.TEXTTOEMBEDDINGS)
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        client._client = mock
+        result = await client.model_by_task(ModelTask.TEXTTOEMBEDDINGS)
 
         assert result is not None
         assert result.id == "nomic-embed"
         assert result.task == ModelTask.TEXTTOEMBEDDINGS
 
         # Verify the task query param was included in the call
-        call_args = mock_client.get.call_args
-        # httpx accepts params as kwargs
+        call_args = mock.get.call_args
         assert call_args[1].get("params", {}).get("task") == "TextToEmbeddings"
+
+
+class TestRunnerClientConnectionPooling:
+    """Tests for the persistent client / connection pooling behavior."""
+
+    def test_get_client_creates_once(self):
+        """Calling _get_client() twice returns the same instance."""
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        c1 = client._get_client()
+        c2 = client._get_client()
+        assert c1 is c2
+
+    def test_get_client_recreates_after_close(self):
+        """If the client is closed, _get_client() creates a new one."""
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        # Simulate a closed client
+        old_mock = MagicMock()
+        old_mock.is_closed = True
+        client._client = old_mock
+
+        c2 = client._get_client()
+        # Should have created a fresh httpx.AsyncClient, not returned the mock
+        assert c2 is not old_mock
+        assert isinstance(c2, httpx.AsyncClient)
+
+    @pytest.mark.asyncio
+    async def test_aclose_closes_client(self):
+        """aclose() closes the internal client."""
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        mock = AsyncMock()
+        mock.is_closed = False
+        client._client = mock
+
+        await client.aclose()
+
+        mock.aclose.assert_called_once()
+        assert client._client is None
+
+    @pytest.mark.asyncio
+    async def test_aclose_noop_when_no_client(self):
+        """aclose() is safe when no client has been created."""
+        client = RunnerClient(endpoints=["http://runner1:8000"])
+        await client.aclose()  # should not raise

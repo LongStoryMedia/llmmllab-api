@@ -288,24 +288,22 @@ class DialogGraphBuilder(GraphBuilder):
     ) -> WorkflowState:
         """Create initial workflow state from messages."""
 
-        # Get user configuration from shared data layer
-        from db import storage  # pylint: disable=import-outside-toplevel
-
-        user_config = await storage.get_service(storage.user_config).get_user_config(
-            user_id
+        from services import (  # pylint: disable=import-outside-toplevel
+            user_config_service,
+            message_service,
+            conversation_service,
+            summary_service,
         )
 
-        messages = await storage.get_service(storage.message).get_conversation_history(
+        user_config = await user_config_service.get_user_config(user_id)
+
+        messages = await message_service.get_conversation_history(conversation_id)
+
+        conversation = await conversation_service.get_conversation(conversation_id)
+
+        summaries = await summary_service.get_summaries_for_conversation(
             conversation_id
         )
-
-        conversation = await storage.get_service(storage.conversation).get_conversation(
-            conversation_id
-        )
-
-        summaries = await storage.get_service(
-            storage.summary
-        ).get_summaries_for_conversation(conversation_id)
 
         # WorkflowState expects Message objects, not BaseMessage objects
         # So we use the messages directly without LangChain conversion

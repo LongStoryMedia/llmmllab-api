@@ -10,7 +10,8 @@ Configuration Management:
 - No configuration merging logic should exist in service layer components
 """
 
-from typing import Dict, Optional, Type
+import hashlib
+from typing import Any, Dict, List, Optional, Type
 
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ from models import (
     MessageContentType,
 )
 
+from graph.cache_utils import _tools_cache_key
 from graph.workflows.base import GraphBuilder
 from graph.state import WorkflowState
 from graph.cache import WorkflowCache
@@ -71,30 +73,31 @@ class ComposerService:
         """
         try:
             # 1. Get user configuration from shared data layer
-            from db import storage  # pylint: disable=import-outside-toplevel
+            from services import user_config_service  # pylint: disable=import-outside-toplevel
 
-            user_config = await storage.get_service(
-                storage.user_config
-            ).get_user_config(user_id)
+            user_config = await user_config_service.get_user_config(user_id)
 
-            # 2. Use per-user cache if enabled (cache based on user_id only now)
+            # 2. Use per-user cache if enabled
             user_cache = None
             if user_config.workflow.enable_workflow_caching:
                 if user_id not in self.workflow_caches:
                     self.workflow_caches[user_id] = WorkflowCache()
                 user_cache = self.workflow_caches[user_id]
 
-                # Simplified cache key - master workflow is the same for all users
+                # Build cache key that incorporates model + tool definitions
                 cache_key = f"workflow_{user_id}"
-
                 if model_name:
                     cache_key += f"_{model_name}"
-                    cached_workflow = await user_cache.get(cache_key)
-                else:
-                    entry = user_cache.cache.popitem()[1]
-                    assert entry is not None, "Cached workflow should not be None"
-                    cached_workflow = entry.access()
 
+                client_tools = build_kwargs.get("client_tools")
+                if client_tools:
+                    cache_key += f"_{_tools_cache_key(client_tools)}"
+
+                server_tool_names = build_kwargs.get("server_tool_names")
+                if server_tool_names:
+                    cache_key += f"_st{hashlib.md5(','.join(sorted(server_tool_names)).encode()).hexdigest()[:8]}"
+
+                cached_workflow = await user_cache.get(cache_key)
                 if cached_workflow:
                     self.logger.debug(
                         "Retrieved workflow from cache",
@@ -105,21 +108,13 @@ class ComposerService:
             # 3. Build master workflow
             assert self.graph_builder is not None, "GraphBuilder should be initialized"
 
-            # Filter out None-valued kwargs so empty tool params don't bypass cache
-            effective_kwargs = {k: v for k, v in build_kwargs.items() if v is not None}
+            workflow = await self.graph_builder.build_workflow(
+                user_id, response_format, model_name=model_name, **build_kwargs
+            )
 
-            if user_cache and not effective_kwargs:
-                # Only use cache when no dynamic kwargs (tools change per request)
-                workflow = await user_cache.get_or_create(
-                    cache_key,
-                    lambda: self.graph_builder.build_workflow(
-                        user_id, response_format, model_name=model_name, **build_kwargs
-                    ),
-                )
-            else:
-                workflow = await self.graph_builder.build_workflow(
-                    user_id, response_format, model_name=model_name, **build_kwargs
-                )
+            # Store in cache if caching is enabled
+            if user_cache:
+                await user_cache.set(cache_key, workflow)
 
             self.logger.info(
                 "Master workflow composed successfully", extra={"user_id": user_id}

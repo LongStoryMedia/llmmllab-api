@@ -6,7 +6,7 @@ Users router for handling user management and authentication.
 from typing import List
 from fastapi import APIRouter, HTTPException, Request
 
-from db import storage
+from services import user_config_service, conversation_service
 from middleware.auth import get_user_id, is_admin
 
 from models.user import User
@@ -25,11 +25,11 @@ async def get_users(request: Request):
     if not is_admin(request):
         raise HTTPException(status_code=403, detail="Admin access required")
 
-    if not storage.initialized or not storage.user_config:
+    if not user_config_service.available:
         raise HTTPException(status_code=503, detail="Database not initialized")
 
     try:
-        users = await storage.user_config.get_all_users()
+        users = await user_config_service.get_all_users()
         # Transform the data to match the User model
         transformed_users = []
         for user in users:
@@ -67,7 +67,7 @@ async def get_conversations_for_user(user_id: str, request: Request):
             detail="Admin access required to view other users' conversations",
         )
 
-    if not storage.initialized or not storage.conversation:
+    if not conversation_service.available:
         raise HTTPException(status_code=503, detail="Database not initialized")
 
-    return await storage.conversation.get_user_conversations(user_id)
+    return await conversation_service.get_user_conversations(user_id)

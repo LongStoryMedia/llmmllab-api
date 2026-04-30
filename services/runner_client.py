@@ -4,6 +4,9 @@ RunnerClient — HTTP client for the llmmllab-runner service pool.
 Routes requests among multiple runner instances based on health and
 hardware capability (VRAM). Manages server lifecycle (acquire, release,
 shutdown) and model discovery across all runners.
+
+Uses a persistent ``httpx.AsyncClient`` with connection pooling to avoid
+the overhead of opening a new TCP connection for every request.
 """
 
 import asyncio
@@ -18,6 +21,11 @@ from utils.logging import llmmllogger
 
 logger = llmmllogger.bind(component="runner_client")
 
+# Timeouts for different request categories
+_HEALTH_TIMEOUT = httpx.Timeout(5.0)
+_FAST_TIMEOUT = httpx.Timeout(10.0)
+_ACQUIRE_TIMEOUT = httpx.Timeout(150.0)
+
 
 @dataclass
 class ServerHandle:
@@ -29,11 +37,35 @@ class ServerHandle:
 
 
 class RunnerClient:
-    """HTTP client that routes requests among multiple runner instances."""
+    """HTTP client that routes requests among multiple runner instances.
+
+    Maintains a persistent ``httpx.AsyncClient`` for connection reuse.
+    Call ``aclose()`` during application shutdown to clean up.
+    """
 
     def __init__(self, endpoints: Optional[list[str]] = None):
         self._endpoints = endpoints if endpoints is not None else list(RUNNER_ENDPOINTS)
         self._healthy: list[str] = []
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Lazily create a shared ``httpx.AsyncClient``."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=_FAST_TIMEOUT,
+                limits=httpx.Limits(
+                    max_connections=20,
+                    max_keepalive_connections=10,
+                    keepalive_expiry=120,
+                ),
+            )
+        return self._client
+
+    async def aclose(self) -> None:
+        """Close the shared HTTP client.  Call during app shutdown."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     # ------------------------------------------------------------------
     # Health
@@ -42,17 +74,17 @@ class RunnerClient:
     async def _health(self, endpoint: str) -> Optional[dict]:
         """Check health of a single runner. Returns health dict or None."""
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(f"{endpoint}/health")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if endpoint not in self._healthy:
-                        self._healthy.append(endpoint)
-                    return data
-                else:
-                    if endpoint in self._healthy:
-                        self._healthy.remove(endpoint)
-                    return None
+            client = self._get_client()
+            resp = await client.get(f"{endpoint}/health", timeout=_HEALTH_TIMEOUT)
+            if resp.status_code == 200:
+                data = resp.json()
+                if endpoint not in self._healthy:
+                    self._healthy.append(endpoint)
+                return data
+            else:
+                if endpoint in self._healthy:
+                    self._healthy.remove(endpoint)
+                return None
         except Exception as e:
             logger.warning(f"Runner {endpoint} health check failed: {e}")
             if endpoint in self._healthy:
@@ -121,29 +153,31 @@ class RunnerClient:
         last_error = None
         for endpoint in ordered:
             try:
-                async with httpx.AsyncClient(timeout=150) as client:
-                    resp = await client.post(
-                        f"{endpoint}/v1/server/create", json=payload
-                    )
+                client = self._get_client()
+                resp = await client.post(
+                    f"{endpoint}/v1/server/create",
+                    json=payload,
+                    timeout=_ACQUIRE_TIMEOUT,
+                )
 
-                    if resp.status_code == 507:
-                        logger.warning(
-                            f"Runner {endpoint} returned 507, trying next runner"
-                        )
-                        last_error = "Insufficient capacity"
-                        continue
+                if resp.status_code == 507:
+                    logger.warning(
+                        f"Runner {endpoint} returned 507, trying next runner"
+                    )
+                    last_error = "Insufficient capacity"
+                    continue
 
-                    resp.raise_for_status()
-                    data = resp.json()
-                    handle = ServerHandle(
-                        base_url=f"{endpoint}/v1/server/{data['server_id']}",
-                        server_id=data["server_id"],
-                        runner_host=endpoint,
-                    )
-                    logger.info(
-                        f"Acquired server {handle.server_id} from {endpoint}"
-                    )
-                    return handle
+                resp.raise_for_status()
+                data = resp.json()
+                handle = ServerHandle(
+                    base_url=f"{endpoint}/v1/server/{data['server_id']}",
+                    server_id=data["server_id"],
+                    runner_host=endpoint,
+                )
+                logger.info(
+                    f"Acquired server {handle.server_id} from {endpoint}"
+                )
+                return handle
 
             except Exception as e:
                 logger.warning(f"Failed to acquire from {endpoint}: {e}")
@@ -158,11 +192,11 @@ class RunnerClient:
     async def release_server(self, handle: ServerHandle) -> None:
         """Release an acquired server back to the runner."""
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(
-                    f"{handle.runner_host}/v1/server/{handle.server_id}/release"
-                )
-                resp.raise_for_status()
+            client = self._get_client()
+            resp = await client.post(
+                f"{handle.runner_host}/v1/server/{handle.server_id}/release"
+            )
+            resp.raise_for_status()
             logger.info(f"Released server {handle.server_id}")
         except Exception as e:
             logger.error(f"Failed to release server {handle.server_id}: {e}")
@@ -171,11 +205,11 @@ class RunnerClient:
     async def shutdown_server(self, handle: ServerHandle) -> None:
         """Permanently shut down a server on the runner."""
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.delete(
-                    f"{handle.runner_host}/v1/server/{handle.server_id}"
-                )
-                resp.raise_for_status()
+            client = self._get_client()
+            resp = await client.delete(
+                f"{handle.runner_host}/v1/server/{handle.server_id}"
+            )
+            resp.raise_for_status()
             logger.info(f"Shutdown server {handle.server_id}")
         except Exception as e:
             logger.error(f"Failed to shutdown server {handle.server_id}: {e}")
@@ -189,16 +223,16 @@ class RunnerClient:
         """List all available models across all runners, deduplicated by id."""
         seen_ids: set[str] = set()
         all_models: List[Model] = []
+        client = self._get_client()
 
         tasks = []
         for endpoint in self._endpoints:
 
             async def fetch_models(ep=endpoint):
                 try:
-                    async with httpx.AsyncClient(timeout=10) as client:
-                        resp = await client.get(f"{ep}/v1/models")
-                        if resp.status_code == 200:
-                            return resp.json()
+                    resp = await client.get(f"{ep}/v1/models")
+                    if resp.status_code == 200:
+                        return resp.json()
                 except Exception as e:
                     logger.warning(f"Failed to list models from {ep}: {e}")
                 return []
@@ -219,17 +253,17 @@ class RunnerClient:
 
     async def model_by_task(self, task: ModelTask) -> Optional[Model]:
         """Find the first model matching the given task across all runners."""
+        client = self._get_client()
         for endpoint in self._endpoints:
             try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    resp = await client.get(
-                        f"{endpoint}/v1/models", params={"task": task.value}
-                    )
-                    if resp.status_code == 200:
-                        models = resp.json()
-                        for model_data in models:
-                            if model_data.get("task") == task.value:
-                                return Model(**model_data)
+                resp = await client.get(
+                    f"{endpoint}/v1/models", params={"task": task.value}
+                )
+                if resp.status_code == 200:
+                    models = resp.json()
+                    for model_data in models:
+                        if model_data.get("task") == task.value:
+                            return Model(**model_data)
             except Exception as e:
                 logger.warning(f"Failed to query models from {endpoint}: {e}")
                 continue

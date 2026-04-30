@@ -245,23 +245,6 @@ class ApiKeyValidator:
 
     def __init__(self):
         self.logger = llmmllogger.bind(component="api_key_validator")
-        # Storage service will be lazily initialized when needed
-        self._api_key_storage = None
-
-    async def _get_api_key_storage(self):
-        """Lazy-load the API key storage service"""
-        if self._api_key_storage is None:
-            # Import here to avoid circular dependencies
-            from db import storage  # pylint: disable=import-outside-toplevel
-
-            # Make sure storage is initialized
-            if not storage.initialized:
-                raise RuntimeError(
-                    "Database storage not initialized. Cannot validate API keys."
-                )
-            self._api_key_storage = storage.api_key
-
-        return self._api_key_storage
 
     async def validate_api_key(self, api_key: str) -> Optional[TokenValidationResult]:
         """
@@ -269,10 +252,14 @@ class ApiKeyValidator:
         Returns None if API key is invalid, revoked, or expired.
         """
         try:
-            api_key_storage = await self._get_api_key_storage()
-            assert api_key_storage is not None, "API key storage service not available"
+            from services import api_key_service  # pylint: disable=import-outside-toplevel
 
-            api_key_obj = await api_key_storage.validate_api_key(api_key)
+            if not api_key_service.available:
+                raise RuntimeError(
+                    "Database storage not initialized. Cannot validate API keys."
+                )
+
+            api_key_obj = await api_key_service.validate_api_key(api_key)
 
             if not api_key_obj:
                 self.logger.warning("Invalid or expired API key provided")
@@ -280,7 +267,7 @@ class ApiKeyValidator:
 
             # Update last_used_at timestamp (non-blocking)
             try:
-                await api_key_storage.update_last_used(api_key_obj.id)
+                await api_key_service.update_last_used(api_key_obj.id)
             except Exception as e:
                 self.logger.debug(f"Failed to update last_used timestamp: {e}")
 

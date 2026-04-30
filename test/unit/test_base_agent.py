@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from agents.base import BaseAgent
 from models import NodeMetadata, ErrorDetails
-from core.errors import NodeExecutionError
+from graph.errors import NodeExecutionError
 
 
 class ConcreteAgent(BaseAgent):

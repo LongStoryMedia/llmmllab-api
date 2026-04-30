@@ -25,8 +25,8 @@ import uuid
 from pydantic import BaseModel
 from models import ChatResponse, Message
 from utils.logging import llmmllogger
-from core.service import CompiledStateGraph, ComposerService
-from core.errors import ComposerError
+from graph.service import CompiledStateGraph, ComposerService
+from graph.errors import ComposerError
 from graph.executor import stream_workflow
 from graph.state import ServerToolEvent
 from graph.workflows.base import GraphBuilder

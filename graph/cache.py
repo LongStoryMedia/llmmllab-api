@@ -54,16 +54,13 @@ class WorkflowCache:
     async def _get_user_config(self, user_id: str):
         """Get user configuration from shared data layer."""
         try:
-            from db import storage  # pylint: disable=import-outside-toplevel
+            from services import user_config_service  # pylint: disable=import-outside-toplevel
 
-            # Initialize storage if not done
-            if not storage.pool:
+            if not user_config_service.available:
                 llmmllogger.logger.warning("Database not initialized for WorkflowCache")
                 return None
 
-            user_config = await storage.get_service(
-                storage.user_config
-            ).get_user_config(user_id)
+            user_config = await user_config_service.get_user_config(user_id)
             if not user_config:
                 llmmllogger.logger.warning(
                     f"No user config found for {user_id} in WorkflowCache"

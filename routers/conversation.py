@@ -14,7 +14,7 @@ from models import (
 from pydantic import BaseModel
 from middleware.auth import get_request_id, get_user_id, is_admin
 from config import logger  # Import logger from config
-from db import storage
+from services import conversation_service, message_service
 from composer_init import clear_workflow_cache
 from .chat import router, composer_chat_completion
 
@@ -28,14 +28,12 @@ async def list_conversations(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Check if database is initialized
-    if not storage.initialized or storage.conversation is None:
+    if not conversation_service.available:
         logger.warning("Database not initialized, cannot list conversations")
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
     try:
-        # Get all conversations for the user
-        conversations = await storage.conversation.get_user_conversations(user_id)
+        conversations = await conversation_service.get_user_conversations(user_id)
         return conversations
     except Exception as e:  # noqa: BLE001, justified for DB errors
         logger.error(f"Error listing conversations: {e}")
@@ -51,20 +49,16 @@ async def get_conversation(conversation_id: int, request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Check if database is initialized
-    if not storage.initialized or storage.conversation is None:
+    if not conversation_service.available:
         logger.warning("Database not initialized, cannot get conversation")
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
     try:
-        # Get the conversation
-        conversation = await storage.conversation.get_conversation(conversation_id)
+        conversation = await conversation_service.get_conversation(conversation_id)
 
-        # Check if conversation exists
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Check if user has access to this conversation
         if conversation.user_id != user_id and not is_admin(request):
             raise HTTPException(
                 status_code=403, detail="Access denied to this conversation"
@@ -89,19 +83,17 @@ async def get_conversation_messages(conversation_id: int, request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Log the request for debugging
     logger.debug(
         f"Getting messages for conversation {conversation_id}, user: {user_id}"
     )
 
-    # Check if database is initialized
-    if not storage.initialized or not storage.conversation or not storage.message:
+    if not conversation_service.available or not message_service.available:
         logger.warning("Database not initialized, cannot get messages")
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
     try:
         # First check if conversation exists and user has access
-        conversation = await storage.conversation.get_conversation(conversation_id)
+        conversation = await conversation_service.get_conversation(conversation_id)
 
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -113,7 +105,7 @@ async def get_conversation_messages(conversation_id: int, request: Request):
             )
 
         # Get all messages for the conversation
-        messages = await storage.message.get_messages_by_conversation_id(
+        messages = await message_service.get_messages_by_conversation_id(
             conversation_id, 500, 0
         )
 
@@ -140,14 +132,13 @@ async def delete_conversation(conversation_id: int, request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Check if database is initialized
-    if not storage.initialized or storage.conversation is None:
+    if not conversation_service.available:
         logger.warning("Database not initialized, cannot delete conversation")
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
     try:
         # First check if conversation exists and user has access
-        db_conversation = await storage.conversation.get_conversation(conversation_id)
+        db_conversation = await conversation_service.get_conversation(conversation_id)
 
         if not db_conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -159,7 +150,7 @@ async def delete_conversation(conversation_id: int, request: Request):
             )
 
         # Delete the conversation
-        await storage.conversation.delete_conversation(conversation_id)
+        await conversation_service.delete_conversation(conversation_id)
 
         return {
             "status": "success",
@@ -202,14 +193,13 @@ async def delete_message(conversation_id: int, message_id: int, request: Request
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required")
 
-    # Check if database is initialized
-    if not storage.initialized or not storage.conversation or not storage.message:
+    if not conversation_service.available or not message_service.available:
         logger.warning("Database not initialized, cannot delete message")
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
     try:
         # First check if conversation exists and user has access
-        conversation = await storage.conversation.get_conversation(conversation_id)
+        conversation = await conversation_service.get_conversation(conversation_id)
 
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -221,7 +211,7 @@ async def delete_message(conversation_id: int, message_id: int, request: Request
             )
 
         # Check if message exists and belongs to the conversation
-        message = await storage.message.get_message(message_id)
+        message = await message_service.get_message(message_id)
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
 
@@ -231,7 +221,7 @@ async def delete_message(conversation_id: int, message_id: int, request: Request
             )
 
         # Delete the message
-        await storage.message.delete_message(message_id)
+        await message_service.delete_message(message_id)
 
         return {
             "status": "success",
@@ -278,14 +268,13 @@ async def replay_from_timestamp(
     if not body.message.id:
         raise HTTPException(status_code=400, detail="Message ID required")
 
-    # Check if database is initialized
-    if not storage.initialized or not storage.conversation or not storage.message:
+    if not conversation_service.available or not message_service.available:
         logger.warning("Database not initialized, cannot bulk delete messages")
         raise HTTPException(status_code=503, detail="Database service unavailable")
 
     try:
         # First check if conversation exists and user has access
-        conversation = await storage.conversation.get_conversation(conversation_id)
+        conversation = await conversation_service.get_conversation(conversation_id)
 
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -297,7 +286,7 @@ async def replay_from_timestamp(
             )
 
         # Perform bulk delete
-        await storage.message.delete_all_from_message(body.message)
+        await message_service.delete_all_from_message(body.message)
 
         return StreamingResponse(
             composer_chat_completion(user_id, conversation_id, request_id),
@@ -326,8 +315,6 @@ async def create_conversation(request: Request):
 
     try:
         assert user_id, "User ID not found"
-        convo_service = storage.get_service(storage.conversation)
-        # Create the conversation in the database
         conversation = Conversation(
             id=0,  # Will be set by database
             user_id=user_id,
@@ -335,13 +322,13 @@ async def create_conversation(request: Request):
             created_at=dt.now(),
             updated_at=dt.now(),
         )
-        conversation_id = await convo_service.create_conversation(conversation)
+        new_id = await conversation_service.create_conversation(conversation)
 
-        if not conversation_id:
+        if not new_id:
             raise HTTPException(status_code=500, detail="Failed to create conversation")
 
         # Get the newly created conversation
-        return await convo_service.get_conversation(conversation_id)
+        return await conversation_service.get_conversation(new_id)
     except HTTPException as e:
         raise e
     except Exception as e:  # noqa: BLE001, justified for DB errors

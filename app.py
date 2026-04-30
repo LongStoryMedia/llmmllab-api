@@ -65,7 +65,7 @@ from middleware import (
     MessageValidationMiddleware,
 )
 from config import AUTH_JWKS_URI
-from cleanup_service import cleanup_service
+from services.cleanup_service import cleanup_service
 from db.maintenance import maintenance_service
 from utils.logging import llmmllogger
 from composer_init import shutdown_composer
@@ -137,6 +137,14 @@ async def lifespan(_: FastAPI):
             logger.info("Composer service shutdown completed")
         except Exception as e:
             logger.info(f"Error stopping composer service: {e}")
+
+        # Close runner HTTP client pool
+        try:
+            from services.runner_client import runner_client  # pylint: disable=import-outside-toplevel
+            await runner_client.aclose()
+            logger.info("Runner client closed")
+        except Exception as e:
+            logger.info(f"Error closing runner client: {e}")
 
         cleanup_service.shutdown()
 
