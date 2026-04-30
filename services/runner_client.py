@@ -8,11 +8,12 @@ shutdown) and model discovery across all runners.
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
 from config import RUNNER_ENDPOINTS
+from models import Model, ModelTask
 from utils.logging import llmmllogger
 
 logger = llmmllogger.bind(component="runner_client")
@@ -86,8 +87,8 @@ class RunnerClient:
     async def acquire_server(
         self,
         model_id: str,
-        task: str,
-        config_override: Optional[dict] = None,
+        task: ModelTask,
+        config_override: Optional[Dict[str, Any]] = None,
     ) -> ServerHandle:
         """Acquire a new llama.cpp server from a runner.
 
@@ -102,8 +103,7 @@ class RunnerClient:
         """
         config_override = config_override or {}
         payload: dict[str, Any] = {
-            "model": model_id,
-            "task": task,
+            "model_id": model_id,
             "config_override": config_override,
         }
 
@@ -121,7 +121,7 @@ class RunnerClient:
         last_error = None
         for endpoint in ordered:
             try:
-                async with httpx.AsyncClient(timeout=30) as client:
+                async with httpx.AsyncClient(timeout=150) as client:
                     resp = await client.post(
                         f"{endpoint}/v1/server/create", json=payload
                     )
@@ -136,7 +136,7 @@ class RunnerClient:
                     resp.raise_for_status()
                     data = resp.json()
                     handle = ServerHandle(
-                        base_url=data["base_url"],
+                        base_url=f"{endpoint}/v1/server/{data['server_id']}",
                         server_id=data["server_id"],
                         runner_host=endpoint,
                     )
@@ -185,10 +185,10 @@ class RunnerClient:
     # Model discovery
     # ------------------------------------------------------------------
 
-    async def list_models(self) -> list[dict]:
+    async def list_models(self) -> List[Model]:
         """List all available models across all runners, deduplicated by id."""
         seen_ids: set[str] = set()
-        all_models: list[dict] = []
+        all_models: List[Model] = []
 
         tasks = []
         for endpoint in self._endpoints:
@@ -209,27 +209,27 @@ class RunnerClient:
 
         for result in results:
             if isinstance(result, list):
-                for model in result:
-                    mid = model.get("id")
+                for model_data in result:
+                    mid = model_data.get("id")
                     if mid and mid not in seen_ids:
                         seen_ids.add(mid)
-                        all_models.append(model)
+                        all_models.append(Model(**model_data))
 
         return all_models
 
-    async def model_by_task(self, task: str) -> Optional[dict]:
+    async def model_by_task(self, task: ModelTask) -> Optional[Model]:
         """Find the first model matching the given task across all runners."""
         for endpoint in self._endpoints:
             try:
                 async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.get(
-                        f"{endpoint}/v1/models", params={"task": task}
+                        f"{endpoint}/v1/models", params={"task": task.value}
                     )
                     if resp.status_code == 200:
                         models = resp.json()
-                        for model in models:
-                            if model.get("task") == task:
-                                return model
+                        for model_data in models:
+                            if model_data.get("task") == task.value:
+                                return Model(**model_data)
             except Exception as e:
                 logger.warning(f"Failed to query models from {endpoint}: {e}")
                 continue

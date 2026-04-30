@@ -32,8 +32,8 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-# Disable auth for integration tests
-os.environ.setdefault("DISABLE_AUTH", "true")
+# Integration tests require valid auth credentials.
+# Read TEST_API_KEY from .env.local (seeded by app startup when TEST_USER_ID is set).
 # Prevent huggingface_hub interactive login prompt
 os.environ.setdefault("HF_TOKEN", "sk-dummy-testing-token")
 
@@ -200,7 +200,7 @@ class TestAPIModelsEndpoint:
         from fastapi.testclient import TestClient
 
         with TestClient(app) as client:
-            resp = client.get("/models/")
+            resp = client.get("/models/", headers=_auth_headers())
             assert resp.status_code == 200
             models = resp.json()
             assert isinstance(models, list)
@@ -211,14 +211,30 @@ class TestAPIModelsEndpoint:
             assert "name" in model
             assert "task" in model
 
-    def test_models_endpoint_with_auth_disabled(self):
-        """GET /models works with DISABLE_AUTH=true."""
-        app = _get_api_app()
-        from fastapi.testclient import TestClient
 
-        with TestClient(app) as client:
-            resp = client.get("/models/")
-            assert resp.status_code == 200
+def _read_test_api_key() -> str | None:
+    """Read TEST_API_KEY from .env.local if it exists."""
+    from pathlib import Path
+
+    env_local = Path(_PROJECT_ROOT) / ".env.local"
+    if not env_local.exists():
+        return None
+    for line in env_local.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        if k.strip() == "TEST_API_KEY":
+            return v.strip()
+    return None
+
+
+def _auth_headers() -> dict[str, str]:
+    """Return auth headers using the test API key from .env.local."""
+    api_key = _read_test_api_key()
+    if api_key:
+        return {"Authorization": f"Bearer {api_key}"}
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +251,7 @@ class TestAPIOpenAIModelsEndpoint:
         from fastapi.testclient import TestClient
 
         with TestClient(app) as client:
-            resp = client.get("/v1/models")
+            resp = client.get("/v1/models", headers=_auth_headers())
             assert resp.status_code == 200
             data = resp.json()
             assert data["object"] == "list"

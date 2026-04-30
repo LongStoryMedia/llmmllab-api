@@ -22,10 +22,11 @@ from models import (
     MessageContent,
     MessageContentType,
 )
+from models.model_details import ModelDetails
 from utils.logging import llmmllogger
 import composer_init as composer
-from runner.utils.model_loader import ModelLoader
 from utils import extract_text_from_message  # Import logging utility
+from services.runner_client import runner_client
 
 logger = llmmllogger.bind(component="ollama_router")
 router = APIRouter(tags=["ollama"])
@@ -390,38 +391,40 @@ async def list_local_models(request: Request):
     verify_local_network_access(request)
 
     try:
-        model_loader = ModelLoader()
-        models_dict = model_loader.get_available_models()
+        models = await runner_client.list_models()
 
         # Convert to Ollama format
         ollama_models = []
-        for model_name, model_obj in models_dict.items():
+        for model_obj in models:
+            details = model_obj.details or ModelDetails(
+                format="gguf", family="", families=[], parameter_size="", size=0, original_ctx=0
+            )
             ollama_models.append(
                 {
-                    "name": model_name,
-                    "model": model_name,
+                    "name": model_obj.name,
+                    "model": model_obj.name,
                     "modified_at": datetime.utcnow().isoformat() + "Z",
-                    "size": model_obj.details.size,
-                    "digest": "",
+                    "size": details.size,
+                    "digest": model_obj.id or "",
                     "details": {
-                        "parent_model": "",
-                        "format": "gguf",
-                        "family": model_obj.details.family,
-                        "families": model_obj.details.families,
-                        "parameter_size": model_obj.details.parameter_size,
-                        "quantization_level": model_obj.details.quantization_level,
+                        "parent_model": details.parent_model or "",
+                        "format": details.format or "gguf",
+                        "family": details.family or "",
+                        "families": details.families or [],
+                        "parameter_size": details.parameter_size or "",
+                        "quantization_level": details.quantization_level or "",
                     },
                     "capabilities": {
                         "supports": {
                             "tool_calls": True,
                             "streaming": True,
                             "structured_outputs": True,
-                            "vision": model_obj.details.supports_vision if hasattr(model_obj.details, "supports_vision") else False,  # type: ignore
+                            "vision": details.clip_model_path is not None,
                         },
                         "type": "chat",
                         "object": "model_capabilities",
                         "limits": {
-                            "max_prompt_tokens": model_obj.details.original_ctx,
+                            "max_prompt_tokens": details.original_ctx or 0,
                         },
                     },
                 }
@@ -442,25 +445,32 @@ async def show_model_info(body: OllamaShowRequest):
     """
 
     try:
-        model_loader = ModelLoader()
-        models_dict = model_loader.get_available_models()
+        models = await runner_client.list_models()
 
-        if body.model not in models_dict:
+        model_obj = None
+        for m in models:
+            if m.name == body.model or (m.id and m.id == body.model):
+                model_obj = m
+                break
+
+        if not model_obj:
             raise HTTPException(status_code=404, detail="Model not found")
 
-        model_obj = models_dict[body.model]
+        details = model_obj.details or ModelDetails(
+            format="", family="", families=[], parameter_size="", size=0, original_ctx=0
+        )
 
         return {
             "modelfile": f"FROM {body.model}",
             "parameters": "",
             "template": "",
             "details": {
-                "parent_model": model_obj.details.parent_model or "",
-                "format": model_obj.details.format,
-                "family": model_obj.details.family,
-                "families": model_obj.details.families,
-                "parameter_size": model_obj.details.parameter_size,
-                "quantization_level": model_obj.details.quantization_level or "",
+                "parent_model": details.parent_model or "",
+                "format": details.format or "",
+                "family": details.family or "",
+                "families": details.families or [],
+                "parameter_size": details.parameter_size or "",
+                "quantization_level": details.quantization_level or "",
             },
             "model_info": {},
             "capabilities": ["completion"],

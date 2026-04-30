@@ -43,14 +43,14 @@ class CacheStorage:
     """
 
     # Cache key prefixes for different object types
-    MESSAGE_KEY_PREFIX = "llmmll:message:"
-    SUMMARY_KEY_PREFIX = "llmmll:summary:"
-    CONVERSATION_KEY_PREFIX = "llmmll:conversation:"
-    CONVERSATION_LIST_PREFIX = "llmmll:conversations:"
-    CONVERSATION_MESSAGES_PREFIX = "llmmll:conversation:messages:"
-    MESSAGES_LIST_PREFIX = "llmmll:messages:"
-    SUMMARIES_LIST_PREFIX = "llmmll:summaries:"
-    USERCONFIG_KEY_PREFIX = "llmmll:userconfig:"
+    MESSAGE_KEY_PREFIX = "llmmllab:message:"
+    SUMMARY_KEY_PREFIX = "llmmllab:summary:"
+    CONVERSATION_KEY_PREFIX = "llmmllab:conversation:"
+    CONVERSATION_LIST_PREFIX = "llmmllab:conversations:"
+    CONVERSATION_MESSAGES_PREFIX = "llmmllab:conversation:messages:"
+    MESSAGES_LIST_PREFIX = "llmmllab:messages:"
+    SUMMARIES_LIST_PREFIX = "llmmllab:summaries:"
+    USERCONFIG_KEY_PREFIX = "llmmllab:userconfig:"
 
     def __init__(self, redis_url: Optional[str] = None, timeout: int = 5):
         """Initialize the CacheStorage instance."""

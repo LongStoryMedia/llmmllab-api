@@ -8,9 +8,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from middleware.auth import get_user_id
 from config import logger
-
 from models.model import Model
-from runner.utils.model_loader import ModelLoader
+from services.runner_client import runner_client
 
 router = APIRouter(prefix="/models", tags=["models"])
 
@@ -22,12 +21,7 @@ async def list_models(request: Request):
     _ = get_user_id(request)
 
     try:
-        # Use ModelLoader for consistent model loading with validation and defaults
-        model_loader = ModelLoader()
-        models_dict = model_loader.get_available_models()
-
-        # Convert dictionary values to list
-        models = list(models_dict.values())
+        models = await runner_client.list_models()
 
         logger.info(f"Successfully loaded {len(models)} models for API")
         return models

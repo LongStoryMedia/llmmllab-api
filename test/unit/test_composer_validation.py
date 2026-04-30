@@ -231,14 +231,16 @@ class TestComposerArchitecturalCompliance:
 
     def test_component_separation(self):
         """Test that components are properly separated per architecture rules."""
-        # Test that composer, runner, and models are separate
+        # Test that composer and models are separate modules
+        # Note: runner was extracted to a separate service (llmmllab-runner)
         import composer_init as composer
-        import runner
         import models
+        import services.runner_client as runner_client
 
         # Each should be separate modules
-        assert composer.__file__ != runner.__file__
         assert composer.__file__ != models.__file__
+        assert composer.__file__ != runner_client.__file__
+        assert models.__file__ != runner_client.__file__
 
     def test_no_hardcoded_paths(self):
         """Test that there are no hardcoded paths in critical modules."""

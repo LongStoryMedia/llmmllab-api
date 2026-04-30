@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Migration script: ollama namespace → llmmll namespace
+# Migration script: ollama namespace → llmmllab namespace
 # Preserves all PVC data by renaming hostPath directories on the node
 #
 # Prerequisites:
@@ -20,7 +20,7 @@ set -e
 
 NODE_HOST="lsnode-3.local"
 OLD_NS="ollama"
-NEW_NS="llmmll"
+NEW_NS="llmmllab"
 
 echo "=== Migrating namespace: $OLD_NS → $NEW_NS ==="
 echo ""
@@ -41,14 +41,14 @@ set -e
 # Only the ollama-models directory needs renaming
 # Other PVCs (generated-images, code-base, models) keep their paths
 if [ -d /data/ollama-models ]; then
-    echo "  Moving /data/ollama-models → /data/llmmll-models"
-    mv /data/ollama-models /data/llmmll-models
+    echo "  Moving /data/ollama-models → /data/llmmllab-models"
+    mv /data/ollama-models /data/llmmllab-models
     echo "  ✅ Directory renamed"
-elif [ -d /data/llmmll-models ]; then
-    echo "  /data/llmmll-models already exists, skipping"
+elif [ -d /data/llmmllab-models ]; then
+    echo "  /data/llmmllab-models already exists, skipping"
 else
-    echo "  /data/ollama-models not found, creating /data/llmmll-models"
-    mkdir -p /data/llmmll-models
+    echo "  /data/ollama-models not found, creating /data/llmmllab-models"
+    mkdir -p /data/llmmllab-models
 fi
 REMOTE_COMMANDS
 echo ""
@@ -93,7 +93,7 @@ echo ""
 
 echo "=== Migration complete! ==="
 echo ""
-echo "New service endpoint: llmmll.llmmll.svc.cluster.local:11434"
+echo "New service endpoint: llmmllab.llmmllab.svc.cluster.local:11434"
 echo ""
 echo "Verify with:"
 echo "  kubectl get pods -n $NEW_NS"

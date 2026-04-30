@@ -3,7 +3,9 @@ import os
 from dotenv import load_dotenv
 
 # Load .env file for local development; in k8s env vars are injected directly.
+# .env.local is loaded after .env so it can override values (gitignored).
 load_dotenv()
+load_dotenv(".env.local")
 
 from utils.logging import llmmllogger
 
@@ -18,8 +20,7 @@ AUTH_AUDIENCE = os.environ.get("AUTH_AUDIENCE", "lsm-client")
 AUTH_CLIENT_ID = os.environ.get("AUTH_CLIENT_ID", "lsm-client")
 AUTH_CLIENT_SECRET = os.environ.get("AUTH_CLIENT_SECRET", "")
 AUTH_JWKS_URI = os.environ.get("AUTH_JWKS_URI", "https://auth.longstorymedia.com/keys")
-DISABLE_AUTH = os.environ.get("DISABLE_AUTH", "").lower() == "true"
-TEST_USER_ID = os.environ.get("TEST_USER_ID", "test-user-auth-disabled")
+TEST_USER_ID = os.environ.get("TEST_USER_ID", "")
 
 # ── Database ─────────────────────────────────────────────────────────
 DB_HOST = os.environ.get("DB_HOST", "localhost")
@@ -59,15 +60,10 @@ IMAGE_DIR = os.environ.get("IMAGE_DIR", "/root/images")
 IMAGE_RETENTION_HOURS = int(os.environ.get("IMAGE_RETENTION_HOURS", "24"))
 CONFIG_DIR = os.environ.get("CONFIG_DIR", "/app/config")
 HF_HOME = os.environ.get("HF_HOME", "/root/.cache/huggingface")
-MODELS_FILE_PATH = os.environ.get("MODELS_FILE_PATH", "")
 
 # ── Runner / llama.cpp ───────────────────────────────────────────────
-LLAMA_SERVER_EXECUTABLE = os.environ.get(
-    "LLAMA_SERVER_EXECUTABLE", "/llama.cpp/build/bin/llama-server"
-)
-GPU_POWER_CAP_PCT = int(os.environ.get("GPU_POWER_CAP_PCT", "85"))
-PIPELINE_CACHE_TIMEOUT_MIN = int(os.environ.get("PIPELINE_CACHE_TIMEOUT_MIN", "30"))
-PIPELINE_EVICTION_TIMEOUT_MIN = int(os.environ.get("PIPELINE_EVICTION_TIMEOUT_MIN", "60"))
+# Cache eviction is controlled by the runner via CACHE_TIMEOUT_MIN and
+# EVICTION_TIMEOUT_MIN environment variables.
 
 # ── External API keys ───────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
@@ -75,19 +71,12 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 SEARX_HOST = os.environ.get("SEARX_HOST", "")
 
-# ── Internal security ───────────────────────────────────────────────
-INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
-INTERNAL_ALLOWED_IPS = os.environ.get(
-    "INTERNAL_ALLOWED_IPS", "192.168.0.0/24,10.43.0.0/16"
-)
-
 # ── Feature flags ───────────────────────────────────────────────────
 ENABLE_TOOL_CONTINUATION = (
     os.environ.get("ENABLE_TOOL_CONTINUATION", "true").lower() == "true"
 )
 
-# ── PyTorch ──────────────────────────────────────────────────────────
-os.environ.setdefault("PYTORCH_NO_CUDA_MEMORY_CACHING", "1")
-
 # ── Runner service ─────────────────────────────────────────────────────
-RUNNER_ENDPOINTS = os.environ.get("RUNNER_ENDPOINTS", "http://localhost:8001").split(",")
+RUNNER_ENDPOINTS = os.environ.get("RUNNER_ENDPOINTS", "http://localhost:9000").split(
+    ","
+)

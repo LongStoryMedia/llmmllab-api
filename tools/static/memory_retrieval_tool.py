@@ -26,7 +26,8 @@ from langchain_core.tools import tool
 from langchain.tools import ToolRuntime
 
 from graph.state import WorkflowState
-from runner import pipeline_factory
+from services.runner_client import runner_client
+from langchain_openai import OpenAIEmbeddings
 from db import storage
 from models import ModelTask
 from models.default_configs import DEFAULT_MEMORY_CONFIG
@@ -93,23 +94,23 @@ async def memory_retrieval(
         query_embeddings = None
 
         # Try to get embedding model and generate embeddings
-        embedding_model = pipeline_factory.get_model_by_task(ModelTask.TEXTTOEMBEDDINGS)
+        embedding_model = await runner_client.model_by_task(ModelTask.TEXTTOEMBEDDINGS)
 
-        # Get embedding pipeline from factory
         try:
             if not embedding_model:
                 raise RuntimeError("No TextToEmbeddings model available")
-            embedding_pipeline = pipeline_factory.get_embedding_pipeline(
-                model=embedding_model
+            embedding_handle = await runner_client.acquire_server(
+                model_id=embedding_model.name,
+                task=embedding_model.task,
             )
-            # Generate embeddings for the query using Embeddings interface
-            query_embeddings = embedding_pipeline.embed_documents([query])
+            embed_client = OpenAIEmbeddings(
+                base_url=embedding_handle.base_url,
+                api_key="none",
+            )
+            query_embeddings = await embed_client.aembed_documents([query])
         except Exception as embed_error:
-            # Use fallback if no valid pipeline available
-            logger.warning(
-                f"Embedding generation failed: {embed_error}, using mock embeddings"
-            )
-            query_embeddings = [[0.1] * 768]  # Fallback mock embedding
+            logger.warning(f"Embedding generation failed: {embed_error}, using mock embeddings")
+            query_embeddings = [[0.1] * 768]
 
         # If embeddings are still None, use fallback
         if query_embeddings is None:

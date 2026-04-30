@@ -147,18 +147,12 @@ class LlmmlLogger:
             processors.append(
                 structlog.dev.ConsoleRenderer(
                     colors=True,
-                    exception_formatter=structlog.dev.RichTracebackFormatter(
-                        color_system="truecolor", show_locals=False
-                    ),
                 )
             )
         else:
             processors.append(
                 structlog.dev.ConsoleRenderer(
                     colors=False,
-                    exception_formatter=structlog.dev.RichTracebackFormatter(
-                        color_system=None, show_locals=False
-                    ),
                 )
             )
 
@@ -176,6 +170,10 @@ class LlmmlLogger:
             level=logging_level,
             stream=sys.stdout,
         )
+
+        # Suppress verbose third-party library logging (stainless/OpenAI SDK logs full request bodies at DEBUG)
+        for _lib in ("openai", "httpx", "httpcore", "anyio", "starlette"):
+            logging.getLogger(_lib).setLevel(logging.WARNING)
 
         self.logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(
             service_name

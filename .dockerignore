@@ -69,7 +69,6 @@ htmlcov/
 *.model
 *.bin
 *.safetensors
-models/
 data/
 datasets/
 
@@ -107,3 +106,5 @@ npm-debug.log*
 .env.local
 .env.development
 .env.test
+.env
+docker-compose.yml

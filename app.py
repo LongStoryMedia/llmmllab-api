@@ -40,11 +40,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from huggingface_hub import login
-
-from config import CONFIG_DIR, IMAGE_DIR, HF_TOKEN
+from config import CONFIG_DIR, IMAGE_DIR, TEST_USER_ID
 from routers import (
-    images,
+    # images,  # requires PIL (GPU dep, belongs in runner)
     config,
     static,
     websockets,
@@ -53,7 +51,6 @@ from routers import (
     model,
     chat,
     conversation,
-    internal,
     db_admin,
     documents,
     ollama,
@@ -72,33 +69,13 @@ from cleanup_service import cleanup_service
 from db.maintenance import maintenance_service
 from utils.logging import llmmllogger
 from composer_init import shutdown_composer
-from runner import pipeline_cache
 
 logger = llmmllogger.bind(component="app")
 
-# # # Enable auth bypass for testing
-# os.environ["DISABLE_AUTH"] = "true"
-# # # Set test user ID to match existing conversation owner
-# os.environ["TEST_USER_ID"] = "CgNsc20SBGxkYXA"
 
 # Create required directories if they don't exist
 os.makedirs(IMAGE_DIR, exist_ok=True)
 os.makedirs(CONFIG_DIR, exist_ok=True)
-
-# Get Hugging Face token from config
-if HF_TOKEN:
-    logger.info("Logging into Hugging Face with token from environment variable")
-    login(token=HF_TOKEN)
-else:
-    logger.info(
-        "Warning: No HF_TOKEN environment variable found. Some features may not work properly."
-    )
-    # Try login without token, will use cached credentials if available
-    try:
-        login(token=None)
-    except (ValueError, ConnectionError, TimeoutError) as e:
-        logger.info(f"Failed to log in to Hugging Face: {e}")
-        logger.info("Continuing without Hugging Face authentication")
 
 
 @asynccontextmanager
@@ -118,6 +95,25 @@ async def lifespan(_: FastAPI):
 
         await storage.initialize(DB_CONNECTION_STRING)
         logger.info("Database schema initialized successfully")
+
+        # Seed local dev user and API key
+        if TEST_USER_ID:
+            try:
+                from db.seed import (
+                    seed_test_user_and_api_key,
+                )  # pylint: disable=import-outside-toplevel
+
+                assert storage.session_factory is not None
+                api_key = await seed_test_user_and_api_key(
+                    storage.session_factory, TEST_USER_ID
+                )
+                if api_key:
+                    logger.info(
+                        f"Local dev credentials — user_id: {TEST_USER_ID}, "
+                        f"api_key: {api_key} (saved to .env.local)"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to seed test user/API key: {e}")
     except Exception as e:
         logger.error(f"Failed to initialize database schema: {e}")
 
@@ -141,18 +137,6 @@ async def lifespan(_: FastAPI):
             logger.info("Composer service shutdown completed")
         except Exception as e:
             logger.info(f"Error stopping composer service: {e}")
-
-        # Attempt to gracefully stop and cleanup pipeline cache
-        try:
-            if pipeline_cache is not None:
-                logger.info("Stopping pipeline cache and cleaning pipelines...")
-                try:
-                    pipeline_cache.stop()
-                    logger.info("Pipeline cache stopped and cleaned")
-                except Exception as e:
-                    logger.info(f"Error stopping pipeline cache: {e}")
-        except Exception:
-            pass
 
         cleanup_service.shutdown()
 
@@ -288,11 +272,6 @@ async def auth_middleware_handler(request: Request, call_next):
             content={"error": "Authentication middleware not initialized properly"},
         )
 
-    if os.environ.get("DISABLE_AUTH", "").lower() == "true":
-        logger.warning("Auth is disabled via environment variable")
-        response = await call_next(request)
-        return response
-
     try:
         # Get the auth middleware from app state
         auth_middleware = app_instance.state.auth_middleware
@@ -340,7 +319,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Include non-versioned routers (for backward compatibility)
-app.include_router(images.router)
+# app.include_router(images.router)  # requires PIL (GPU dep)
 app.include_router(model.router)
 app.include_router(chat.router)
 app.include_router(conversation.router)
@@ -352,7 +331,6 @@ app.include_router(todos.router)
 app.include_router(documents.router)
 
 # Import and include the internal router
-app.include_router(internal.router)
 app.include_router(db_admin.router)
 
 # Include Ollama-compatible API endpoints

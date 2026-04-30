@@ -128,7 +128,10 @@ class IdeGraphBuilder(GraphBuilder):
             # Look up model by name or fall back to first TextToText model
             if model_name:
                 all_models = await runner_client.list_models()
-                model_def = next((m for m in all_models if m.name == model_name), None)
+                model_def = next(
+                    (m for m in all_models if m.name == model_name or m.id == model_name),
+                    None,
+                )
                 if not model_def:
                     raise RuntimeError(f"Model '{model_name}' not found")
             else:
@@ -144,7 +147,7 @@ class IdeGraphBuilder(GraphBuilder):
             )
 
             server_handle = await runner_client.acquire_server(
-                model_id=model_def.name,
+                model_id=model_def.id,
                 task=model_def.task,
             )
 

@@ -41,7 +41,7 @@ Copy `.env.example` to `.env` and set the required values:
 |----------|-------------|
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | PostgreSQL connection |
 | `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT` | Redis cache (optional) |
-| `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_JWKS_URI` | JWT auth (set `DISABLE_AUTH=true` to skip) |
+| `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_JWKS_URI` | JWT auth (JWT + API key) |
 | `HF_TOKEN` | HuggingFace token for model downloads |
 | `PORT` | Server port (default: 8000) |
 | `LOG_LEVEL` | Logging verbosity (debug, info, warning, error) |

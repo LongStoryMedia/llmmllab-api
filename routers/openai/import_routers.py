@@ -1,7 +1,7 @@
 """Auto-generated router imports"""
 
 from .assistants import router as assistants_router
-from .audio import router as audio_router
+# from .audio import router as audio_router  # requires whisper (GPU dep, belongs in runner)
 from .batches import router as batches_router
 from .chat import router as chat_router
 from .chatkit import router as chatkit_router
@@ -14,7 +14,7 @@ from .evals import router as evals_router
 # files router moved to common
 # from .files import router as files_router
 from .fine_tuning import router as fine_tuning_router
-from .images import router as images_router
+# from .images import router as images_router  # requires heavy image deps (belongs in runner)
 
 # models router moved to common
 # from .models import router as models_router
@@ -22,16 +22,16 @@ from .moderations import router as moderations_router
 from .organization import router as organization_router
 from .projects import router as projects_router
 from .projects import router as projects_router
-from .realtime import router as realtime_router
+# from .realtime import router as realtime_router  # requires heavy deps (belongs in runner)
 from .responses import router as responses_router
 from .threads import router as threads_router
 from .uploads import router as uploads_router
 from .vector_stores import router as vector_stores_router
-from .videos import router as videos_router
+# from .videos import router as videos_router  # requires heavy deps (belongs in runner)
 
 ROUTERS = [
     assistants_router,
-    audio_router,
+    # audio_router,  # requires whisper (GPU dep)
     batches_router,
     chat_router,
     chatkit_router,
@@ -41,14 +41,14 @@ ROUTERS = [
     embeddings_router,
     evals_router,
     fine_tuning_router,
-    images_router,
+    # images_router,  # requires heavy image deps
     moderations_router,
     organization_router,
     projects_router,
-    realtime_router,
+    # realtime_router,  # requires heavy deps
     responses_router,
     threads_router,
     uploads_router,
     vector_stores_router,
-    videos_router,
+    # videos_router,  # requires heavy deps
 ]

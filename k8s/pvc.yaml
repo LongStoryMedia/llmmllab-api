@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: generated-images
+  name: generated-images-llmmllab
 spec:
   storageClassName: ""
   capacity:
@@ -12,7 +12,7 @@ spec:
     path: /data/generated-images
     type: DirectoryOrCreate
   claimRef:
-    namespace: llmmll
+    namespace: llmmllab
     name: generated-images
   nodeAffinity:
     required:
@@ -27,7 +27,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: generated-images
-  namespace: llmmll
+  namespace: llmmllab
 spec:
   storageClassName: ""
   accessModes:
@@ -39,7 +39,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: code-base
+  name: code-base-llmmllab
 spec:
   storageClassName: ""
   capacity:
@@ -50,7 +50,7 @@ spec:
     path: /data/code-base
     type: DirectoryOrCreate
   claimRef:
-    namespace: llmmll
+    namespace: llmmllab
     name: code-base
   nodeAffinity:
     required:
@@ -65,7 +65,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: code-base
-  namespace: llmmll
+  namespace: llmmllab
 spec:
   storageClassName: ""
   accessModes:

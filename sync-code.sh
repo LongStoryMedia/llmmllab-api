@@ -3,7 +3,7 @@
 #
 # Flags:
 #   -w, --watch    Watch for local changes and sync continuously.
-#   -r, --restart  Restart the llmmll deployment after sync.
+#   -r, --restart  Restart the llmmllab deployment after sync.
 
 set -e
 
@@ -17,7 +17,7 @@ for arg in "$@"; do
             cat <<EOF
 Usage: $0 [options]
   -w, --watch    Watch for local changes and sync continuously
-  -r, --restart  Restart the llmmll deployment after sync
+  -r, --restart  Restart the llmmllab deployment after sync
 Env:
   REMOTE_NODE_HOST, REMOTE_NODE_USER override node defaults.
 EOF
@@ -52,7 +52,7 @@ sync_once() {
     "${SCRIPT_DIR}/" "${NODE_USER}@${NODE_HOST}:${NODE_CODE_PATH}/"
     echo "✅ Synced"
     if [ "$RESTART" = "1" ]; then
-        kubectl rollout restart deployment llmmll -n llmmll
+        kubectl rollout restart deployment llmmllab -n llmmllab
     fi
 }
 

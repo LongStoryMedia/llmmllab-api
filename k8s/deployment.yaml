@@ -1,67 +1,36 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: llmmll
-  namespace: llmmll
+  name: llmmllab-api
+  namespace: llmmllab
   labels:
-    app: llmmll
+    app: llmmllab-api
 spec:
   selector:
     matchLabels:
-      app: llmmll
+      app: llmmllab-api
   template:
     metadata:
       labels:
-        app: llmmll
+        app: llmmllab-api
     spec:
-      runtimeClassName: nvidia
-      nodeSelector:
-        kubernetes.io/hostname: lsnode-3
-      volumes:
-        - name: init-script
-          configMap:
-            name: llmmll-init-script
-            defaultMode: 0755
-        - name: generated-images
-          persistentVolumeClaim:
-            claimName: generated-images
-        - name: code-base
-          persistentVolumeClaim:
-            claimName: code-base
-        - name: models
-          hostPath:
-            path: /models
-            type: DirectoryOrCreate
+      imagePullSecrets:
+        - name: registry-secret
       containers:
-        - name: llmmll
-          image: 192.168.0.71:31500/inference:main
+        - name: llmmllab
+          image: 192.168.0.71:31500/llmmllab-api:main
           imagePullPolicy: Always
-          securityContext:
-            privileged: true
-            capabilities:
-              add:
-                - SYS_ADMIN
-                - SYS_RAWIO
           ports:
-            - name: sd
-              containerPort: 8000
+            - name: http
+              containerPort: 9999
               protocol: TCP
           resources:
             requests:
-              memory: "12Gi"
-              cpu: "6"
+              memory: "4Gi"
+              cpu: "2"
             limits:
-              memory: "16Gi"
-              cpu: "12"
-          volumeMounts:
-            - name: init-script
-              mountPath: /scripts
-            - name: generated-images
-              mountPath: /root/images
-            - name: code-base
-              mountPath: /app
-            - name: models
-              mountPath: /models
+              memory: "8Gi"
+              cpu: "4"
           env:
             - name: PYTHONPATH
               value: "/app"
@@ -84,7 +53,7 @@ spec:
             - name: AUTH_JWKS_URI
               value: "https://auth.longstorymedia.com/keys"
             - name: DB_HOST
-              value: "llmmll-postgres.llmmll.svc.cluster.local"
+              value: "llmmllab-postgres.llmmllab.svc.cluster.local"
             - name: DB_PORT
               value: "5432"
             - name: DB_USER
@@ -95,7 +64,7 @@ spec:
                   name: db-credentials
                   key: password
             - name: DB_NAME
-              value: "llmmll"
+              value: "llmmllab"
             - name: DB_SSLMODE
               value: "disable"
             - name: DB_REINDEX_ON_MAINTENANCE
@@ -127,11 +96,15 @@ spec:
             - name: SUMMARY_MODEL
               value: "qwen3:0.6b"
             - name: SUMMARY_SYSTEM_PROMPT
-              value: "compress the following conversation so far into a concise paragraph. Include key points and conclusions, but omit redundant details. The summary will be used as context for future interaction. It should be as small as possible and does not need to be human readable."
+              value: "compress the following conversation so far into a concise paragraph.
+                Include key points and conclusions, but omit redundant details.
+                The summary will be used as context for future interaction. It
+                should be as small as possible and does not need to be human
+                readable."
             - name: MAX_SUMMARY_LEVELS
               value: "3"
             - name: SUMMARY_WEIGHT_COEFFICIENT
-              value: "192.168.0.71"
+              value: "0.7"
             - name: IMAGE_GENERATION_ENABLED
               value: "true"
             - name: IMAGE_DIR
@@ -153,24 +126,11 @@ spec:
               value: "1"
             - name: API_VERSION
               value: "v1"
-              # THIS SHOULD BE UPDATED WITH  Number  OF GPUS;
-            - name: CUDA_VISIBLE_DEVICES
-              value: "0,1,2"
-            - name: CUDA_DEVICE_ORDER
-              value: "PCI_BUS_ID"
-            - name: PYTHONMALLOC
-              value: "malloc"
-            - name: MALLOC_ARENA_MAX
-              value: "2"
-            - name: GGML_LOG_LEVEL
-              value: "2"
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: "all"
-            - name: NVIDIA_DRIVER_CAPABILITIES
-              value: "compute,utility"
             - name: SEARX_HOST
               value: "http://searxng.searxng.svc.cluster.local:8080"
-            - name: ENABLE_INTELLIGENT_OOM_RECOVERY
-              value: "true"
+            - name: RUNNER_ENDPOINTS
+              value: "http://llmmllab-runner.llmmllab.svc.cluster.local:8000"
+            - name: PORT
+              value: "9999"
   strategy:
     type: Recreate

@@ -15,7 +15,6 @@ from pydantic import BaseModel
 from middleware.auth import get_request_id, get_user_id, is_admin
 from config import logger  # Import logger from config
 from db import storage
-from runner import pipeline_cache
 from composer_init import clear_workflow_cache
 from .chat import router, composer_chat_completion
 
@@ -187,7 +186,6 @@ async def cancel_conversation(request: Request):
     try:
         logger.info(f"Cancelling conversation for user {user_id}")
         await clear_workflow_cache(user_id)
-        pipeline_cache.clear()
     except HTTPException as e:
         raise e
     except Exception as e:  # noqa: BLE001, justified for DB errors

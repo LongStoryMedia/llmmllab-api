@@ -1,8 +1,8 @@
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata:
-  name: access-to-llmmll
-  namespace: llmmll
+  name: access-to-llmmllab
+  namespace: llmmllab
 spec:
   to:
     - group: ""

@@ -14,8 +14,6 @@ from typing import Dict, Optional, Type
 
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel
-from transformers import ModelCard
-
 from models import (
     Message,
     MessageRole,

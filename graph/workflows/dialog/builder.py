@@ -28,8 +28,11 @@ from models import (
     Message,
     MessageContent,
     MessageContentType,
+    UserConfig,
 )
-from runner import pipeline_factory
+from services.runner_client import runner_client, ServerHandle
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from pydantic import SecretStr
 
 from agents.chat import ChatAgent
 from agents.embed import EmbeddingAgent
@@ -66,6 +69,11 @@ class DialogGraphBuilder(GraphBuilder):
     - Tool orchestration (separate nodes)
     """
 
+    def __init__(self, storage: "Storage", user_config: UserConfig):
+        super().__init__(storage, user_config)
+        self._primary_handle: Optional[ServerHandle] = None
+        self._embedding_handle: Optional[ServerHandle] = None
+
     async def build_workflow(
         self,
         user_id: str,
@@ -87,8 +95,8 @@ class DialogGraphBuilder(GraphBuilder):
             Compiled workflow ready for execution
         """
         try:
-            primary_model_def = pipeline_factory.get_model_by_task(ModelTask.TEXTTOTEXT)
-            embedding_model_def = pipeline_factory.get_model_by_task(
+            primary_model_def = await runner_client.model_by_task(ModelTask.TEXTTOTEXT)
+            embedding_model_def = await runner_client.model_by_task(
                 ModelTask.TEXTTOEMBEDDINGS
             )
 
@@ -97,8 +105,26 @@ class DialogGraphBuilder(GraphBuilder):
             if not embedding_model_def:
                 raise RuntimeError("No TextToEmbeddings model available")
 
-            primary_model = pipeline_factory.get_pipeline(model=primary_model_def)
-            embedding_model = pipeline_factory.get_pipeline(model=embedding_model_def)
+            primary_handle = await runner_client.acquire_server(
+                model_id=primary_model_def.id,
+                task=primary_model_def.task,
+            )
+            embedding_handle = await runner_client.acquire_server(
+                model_id=embedding_model_def.id,
+                task=embedding_model_def.task,
+            )
+
+            primary_model = ChatOpenAI(
+                base_url=primary_handle.base_url,
+                api_key=SecretStr("none"),
+                model=primary_model_def.name,
+            )
+            embedding_model = OpenAIEmbeddings(
+                base_url=embedding_handle.base_url,
+                api_key="none",
+            )
+            self._primary_handle = primary_handle
+            self._embedding_handle = embedding_handle
 
             primary_agent = ChatAgent(
                 model=cast(BaseChatModel, primary_model),

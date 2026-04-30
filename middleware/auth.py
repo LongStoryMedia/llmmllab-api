@@ -62,7 +62,7 @@ from jwt.api_jwk import PyJWK  # Used for JWT key processing
 from fastapi import HTTPException, Request, status
 from fastapi.security import HTTPBearer
 
-from config import DISABLE_AUTH, TEST_USER_ID
+from config import AUTH_AUDIENCE, AUTH_JWKS_URI
 from utils.logging import llmmllogger
 
 
@@ -202,9 +202,7 @@ class JWTValidator:
                 key = self._get_key_from_jwks(jwks, kid)
 
             # Decode and validate token
-            audience = (
-                config.AUTH_AUDIENCE if hasattr(config, "AUTH_AUDIENCE") else None
-            )
+            audience = AUTH_AUDIENCE if AUTH_AUDIENCE else None
 
             payload = jwt.decode(
                 token_str,
@@ -304,8 +302,8 @@ class AuthMiddleware:
 
     def __init__(self, jwks_uri: Optional[str] = None):
         # Use the singleton pattern to ensure consistent JWT handling
-        if jwks_uri is None and hasattr(config, "AUTH_JWKS_URI"):
-            jwks_uri = config.AUTH_JWKS_URI
+        if jwks_uri is None:
+            jwks_uri = AUTH_JWKS_URI
 
         # Ensure we have a jwks_uri by this point
         if jwks_uri is None:
@@ -497,9 +495,6 @@ async def get_current_user(request: Request) -> TokenValidationResult:
 # Utility functions for getting auth data from request
 def get_user_id(request: Request) -> Optional[str]:
     """Get user ID from request state"""
-    if DISABLE_AUTH:
-        return TEST_USER_ID
-
     if hasattr(request.state, "auth"):
         return request.state.auth.get(ContextKey.USER_ID)
     return None
@@ -507,13 +502,6 @@ def get_user_id(request: Request) -> Optional[str]:
 
 def get_user_claims(request: Request) -> Optional[Dict[str, Any]]:
     """Get user claims from request state"""
-    if DISABLE_AUTH:
-        return {
-            "sub": TEST_USER_ID,
-            "email": "test@example.com",
-            "name": "Test User (Auth Disabled)",
-        }
-
     if hasattr(request.state, "auth"):
         return request.state.auth.get(ContextKey.TOKEN_CLAIMS)
     return None
@@ -521,9 +509,6 @@ def get_user_claims(request: Request) -> Optional[Dict[str, Any]]:
 
 def is_admin(request: Request) -> bool:
     """Check if current user is admin"""
-    if DISABLE_AUTH:
-        return True
-
     if hasattr(request.state, "auth"):
         return request.state.auth.get(ContextKey.IS_ADMIN, False)
     return False
@@ -547,8 +532,8 @@ class AuthMiddlewareSingleton:
             # Initialize the instance if it doesn't exist
             if jwks_uri is not None:
                 cls._instance = AuthMiddleware(jwks_uri)
-            elif hasattr(config, "AUTH_JWKS_URI"):
-                cls._instance = AuthMiddleware(config.AUTH_JWKS_URI)
+            elif AUTH_JWKS_URI:
+                cls._instance = AuthMiddleware(AUTH_JWKS_URI)
             else:
                 raise ValueError(
                     "JWKS URI is required but not provided in config or parameters"

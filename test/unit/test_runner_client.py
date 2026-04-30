@@ -9,6 +9,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
 from services.runner_client import RunnerClient, ServerHandle
+from models import ModelTask
 
 
 class TestServerHandle:
@@ -98,7 +99,7 @@ class TestRunnerClientAcquire:
 
         with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
             client = RunnerClient(endpoints=["http://runner1:8000"])
-            handle = await client.acquire_server("llama-3-8b", "TextGeneration", {})
+            handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
 
         assert isinstance(handle, ServerHandle)
         assert handle.server_id == "abc123"
@@ -168,7 +169,7 @@ class TestRunnerClientAcquire:
             client = RunnerClient(
                 endpoints=["http://runner1:8000", "http://runner2:8001"]
             )
-            handle = await client.acquire_server("llama-3-8b", "TextGeneration", {})
+            handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
 
         assert handle is not None
         assert handle.runner_host == "http://runner2:8001"
@@ -246,7 +247,7 @@ class TestRunnerClientAcquire:
             client = RunnerClient(
                 endpoints=["http://runner1:8000", "http://runner2:8001"]
             )
-            handle = await client.acquire_server("llama-3-8b", "TextGeneration", {})
+            handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
 
         assert handle is not None
         assert handle.runner_host == "http://runner2:8001"
@@ -328,7 +329,12 @@ class TestRunnerClientModels:
                     {
                         "id": "llama-3-8b",
                         "name": "Llama 3 8B",
-                        "task": "TextGeneration",
+                        "model": "meta-llama/Llama-3-8B",
+                        "task": "TextToText",
+                        "modified_at": "2025-01-01",
+                        "digest": "abc123",
+                        "provider": "llama_cpp",
+                        "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "8B", "size": 4000000000, "original_ctx": 8192},
                     },
                 ]
                 return mock_resp
@@ -343,7 +349,7 @@ class TestRunnerClientModels:
             models = await client.list_models()
 
         # Deduplicated: should only have one entry
-        model_ids = [m["id"] for m in models]
+        model_ids = [m.id for m in models]
         assert model_ids.count("llama-3-8b") == 1
 
     @pytest.mark.asyncio
@@ -355,12 +361,22 @@ class TestRunnerClientModels:
             {
                 "id": "nomic-embed",
                 "name": "Nomic Embed",
+                "model": "nomic-ai/nomic-embed",
                 "task": "TextToEmbeddings",
+                "modified_at": "2025-01-01",
+                "digest": "def456",
+                "provider": "llama_cpp",
+                "details": {"format": "gguf", "family": "nomic", "families": ["nomic"], "parameter_size": "0.3B", "size": 200000000, "original_ctx": 8192},
             },
             {
                 "id": "llama-3-8b",
                 "name": "Llama 3 8B",
-                "task": "TextGeneration",
+                "model": "meta-llama/Llama-3-8B",
+                "task": "TextToText",
+                "modified_at": "2025-01-01",
+                "digest": "abc123",
+                "provider": "llama_cpp",
+                "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "8B", "size": 4000000000, "original_ctx": 8192},
             },
         ]
 
@@ -371,11 +387,11 @@ class TestRunnerClientModels:
 
         with patch("services.runner_client.httpx.AsyncClient", return_value=mock_client):
             client = RunnerClient(endpoints=["http://runner1:8000"])
-            result = await client.model_by_task("TextToEmbeddings")
+            result = await client.model_by_task(ModelTask.TEXTTOEMBEDDINGS)
 
         assert result is not None
-        assert result["id"] == "nomic-embed"
-        assert result["task"] == "TextToEmbeddings"
+        assert result.id == "nomic-embed"
+        assert result.task == ModelTask.TEXTTOEMBEDDINGS
 
         # Verify the task query param was included in the call
         call_args = mock_client.get.call_args

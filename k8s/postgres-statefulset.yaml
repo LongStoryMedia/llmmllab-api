@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: llmmll-postgres-init
-  namespace: llmmll
+  name: llmmllab-postgres-init
+  namespace: llmmllab
 data:
   init.sh: |
     #!/bin/bash
@@ -13,39 +13,39 @@ data:
     done
     export PGPASSWORD="${POSTGRES_PASSWORD}"
     psql -v ON_ERROR_STOP=0 --username "lsm" --dbname "postgres" <<-EOSQL
-      SELECT 'CREATE DATABASE llmmll' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'llmmll') \gexec
+      SELECT 'CREATE DATABASE llmmllab' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'llmmllab') \gexec
     EOSQL
-    psql -v ON_ERROR_STOP=0 --username "lsm" --dbname "llmmll" -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
-    psql -v ON_ERROR_STOP=0 --username "lsm" --dbname "llmmll" -c "CREATE EXTENSION IF NOT EXISTS vector;"
-    psql -v ON_ERROR_STOP=0 --username "lsm" --dbname "llmmll" -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
+    psql -v ON_ERROR_STOP=0 --username "lsm" --dbname "llmmllab" -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+    psql -v ON_ERROR_STOP=0 --username "lsm" --dbname "llmmllab" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    psql -v ON_ERROR_STOP=0 --username "lsm" --dbname "llmmllab" -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
     unset PGPASSWORD
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: llmmll-postgres
-  namespace: llmmll
+  name: llmmllab-postgres
+  namespace: llmmllab
 automountServiceAccountToken: false
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: llmmll-postgres
-  namespace: llmmll
+  name: llmmllab-postgres
+  namespace: llmmllab
   labels:
-    app: llmmll-postgres
+    app: llmmllab-postgres
 spec:
   replicas: 1
-  serviceName: llmmll-postgres
+  serviceName: llmmllab-postgres
   selector:
     matchLabels:
-      app: llmmll-postgres
+      app: llmmllab-postgres
   template:
     metadata:
       labels:
-        app: llmmll-postgres
+        app: llmmllab-postgres
     spec:
-      serviceAccountName: llmmll-postgres
+      serviceAccountName: llmmllab-postgres
       automountServiceAccountToken: false
       containers:
         - name: postgres
@@ -66,7 +66,7 @@ spec:
                   name: db-credentials
                   key: password
             - name: POSTGRES_DB
-              value: "llmmll"
+              value: "llmmllab"
             - name: PGROOT
               value: /home/postgres
             - name: PGDATA
@@ -119,7 +119,7 @@ spec:
           emptyDir: {}
         - name: init-scripts
           configMap:
-            name: llmmll-postgres-init
+            name: llmmllab-postgres-init
   volumeClaimTemplates:
     - apiVersion: v1
       kind: PersistentVolumeClaim
@@ -135,11 +135,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: llmmll-postgres
-  namespace: llmmll
+  name: llmmllab-postgres
+  namespace: llmmllab
 spec:
   selector:
-    app: llmmll-postgres
+    app: llmmllab-postgres
   ports:
     - name: tcp-postgresql
       port: 5432

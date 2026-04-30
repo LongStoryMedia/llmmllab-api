@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: llmmllab-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: llmmllab
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - llmmllab-postgres-data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d llmmllab"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  llmmllab-postgres-data:

@@ -2,8 +2,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from typing import Optional, Union
-from runner.utils.model_loader import ModelLoader
 from middleware.auth import get_user_id
+from services.runner_client import runner_client
 from models.openai import DeleteModelResponse, ListModelsResponse, Model as OpenAIModel
 from models.anthropic import (
     ModelListResponse as AnthropicModelListResponse,
@@ -27,24 +27,22 @@ OpenAIModelType = OpenAIModel
 AnthropicModelType = AnthropicModel
 
 
-def to_openai_model(model: Model) -> OpenAIModel:
-    """Convert internal Model representation to OpenAI API response format."""
-    assert model.id is not None, "Model ID cannot be None"
+def to_openai_model(model_id: str) -> OpenAIModel:
+    """Create an OpenAI API model response from a model id."""
     return OpenAIModel(
-        id=model.id,
+        id=model_id,
         object="model",
         created=int(datetime.now().timestamp()),
         owned_by="llmmllab",
     )
 
 
-def to_anthropic_model(model: Model) -> AnthropicModel:
-    """Convert internal Model representation to Anthropic API response format."""
-    assert model.id is not None, "Model ID cannot be None"
+def to_anthropic_model(model_id: str, display_name: str) -> AnthropicModel:
+    """Create an Anthropic API model response from a model id."""
     return AnthropicModel(
-        id=model.id,
+        id=model_id,
         type="model",
-        display_name=model.name if hasattr(model, "name") and model.name else model.id,
+        display_name=display_name,
         created_at=datetime.now(),
     )
 
@@ -80,16 +78,12 @@ async def listModels(request: Request) -> ListModelsResponse:
     _ = get_user_id(request)
 
     try:
-        # Use ModelLoader for consistent model loading with validation and defaults
-        model_loader = ModelLoader()
-        models_dict = model_loader.get_available_models()
-
-        # Convert dictionary values to list
-        models = list(models_dict.values())
+        models = await runner_client.list_models()
 
         logger.info(f"Successfully loaded {len(models)} models for API")
+        model_ids = [m.id for m in models if m.id]
         return ListModelsResponse(
-            data=[to_openai_model(m) for m in models],
+            data=[to_openai_model(mid) for mid in model_ids],
             object="list",
         )
 
