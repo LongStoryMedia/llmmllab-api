@@ -92,9 +92,7 @@ async def list_api_keys(request: Request) -> List[ApiKey]:
         )
 
     try:
-        keys = await api_key_service.list_api_keys_for_user(
-            user_id
-        )
+        keys = await api_key_service.list_api_keys_for_user(user_id)
 
         logger.debug(f"Listed {len(keys)} API keys for user {user_id}")
         return keys

@@ -54,7 +54,9 @@ class WorkflowCache:
     async def _get_user_config(self, user_id: str):
         """Get user configuration from shared data layer."""
         try:
-            from services import user_config_service  # pylint: disable=import-outside-toplevel
+            from services import (
+                user_config_service,
+            )  # pylint: disable=import-outside-toplevel
 
             if not user_config_service.available:
                 llmmllogger.logger.warning("Database not initialized for WorkflowCache")

@@ -179,7 +179,9 @@ async def execute_workflow(
     Yields:
         Dict containing workflow events (tokens, state updates, etc.)
     """
-    async for event in stream_workflow(initial_state, workflow, thread_id=str(uuid.uuid4())):
+    async for event in stream_workflow(
+        initial_state, workflow, thread_id=str(uuid.uuid4())
+    ):
         yield event
 
 

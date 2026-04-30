@@ -10,6 +10,7 @@ the overhead of opening a new TCP connection for every request.
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +19,19 @@ import httpx
 from config import RUNNER_ENDPOINTS
 from models import Model, ModelTask
 from utils.logging import llmmllogger
+
+# Suppress verbose httpx/httpcore trace and debug logs at module level.
+# This ensures they're silenced before any client is created, regardless of
+# how the root logger is configured by uvicorn or structlog.
+for _lib_name in (
+    "httpx",
+    "httpcore",
+    "httpcore.connection",
+    "httpcore.http11",
+    "httpcore.proxy",
+    "hpack",
+):
+    logging.getLogger(_lib_name).setLevel(logging.WARNING)
 
 logger = llmmllogger.bind(component="runner_client")
 
@@ -174,9 +188,7 @@ class RunnerClient:
                     server_id=data["server_id"],
                     runner_host=endpoint,
                 )
-                logger.info(
-                    f"Acquired server {handle.server_id} from {endpoint}"
-                )
+                logger.info(f"Acquired server {handle.server_id} from {endpoint}")
                 return handle
 
             except Exception as e:

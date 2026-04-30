@@ -22,6 +22,7 @@ class DocumentService:
     def _get_storage(self):
         if self._storage is None:
             from db import storage  # pylint: disable=import-outside-toplevel
+
             if not storage.initialized or not storage.document:
                 raise RuntimeError("Database not initialized")
             self._storage = storage.document
@@ -31,6 +32,7 @@ class DocumentService:
     def available(self) -> bool:
         """Check if the service is available (DB initialized)."""
         from db import storage  # pylint: disable=import-outside-toplevel
+
         return storage.initialized and storage.document is not None
 
     async def store_document(

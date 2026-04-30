@@ -69,12 +69,13 @@ echo "Applying init script ConfigMap..."
 kubectl apply -f "$(dirname "$0")/init-script.yaml" -n llmmllab --wait=true
 
 echo "Updating deployment image to use tag: $DOCKER_TAG"
-# Create a temporary file with the updated image tag
-sed "s|image: 192.168.0.71:31500/inference:.*|image: 192.168.0.71:31500/inference:$DOCKER_TAG|g" "$(dirname "$0")/deployment.yaml" > "$(dirname "$0")/deployment.yaml.tmp"
-mv "$(dirname "$0")/deployment.yaml.tmp" "$(dirname "$0")/deployment.yaml"
 
 echo "Applying deployment..."
 kubectl apply -f "$(dirname "$0")/deployment.yaml" -n llmmllab --wait=true
+
+echo "Restarting API pods to pull fresh image..."
+kubectl rollout restart deployment/llmmllab-api -n llmmllab
+kubectl rollout status deployment/llmmllab-api -n llmmllab --timeout=120s
 
 echo "Applying service..."
 kubectl apply -f "$(dirname "$0")/service.yaml" -n llmmllab --wait=true

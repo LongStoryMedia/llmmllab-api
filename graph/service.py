@@ -73,7 +73,9 @@ class ComposerService:
         """
         try:
             # 1. Get user configuration from shared data layer
-            from services import user_config_service  # pylint: disable=import-outside-toplevel
+            from services import (
+                user_config_service,
+            )  # pylint: disable=import-outside-toplevel
 
             user_config = await user_config_service.get_user_config(user_id)
 

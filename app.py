@@ -140,7 +140,10 @@ async def lifespan(_: FastAPI):
 
         # Close runner HTTP client pool
         try:
-            from services.runner_client import runner_client  # pylint: disable=import-outside-toplevel
+            from services.runner_client import (
+                runner_client,
+            )  # pylint: disable=import-outside-toplevel
+
             await runner_client.aclose()
             logger.info("Runner client closed")
         except Exception as e:

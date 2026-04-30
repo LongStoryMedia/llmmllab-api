@@ -73,8 +73,7 @@ class TestToolsCacheKey:
     def test_many_tools_produces_stable_key(self):
         """49 tools (typical Claude Code session) still produces a 12-char key."""
         tools = [
-            {"type": "function", "function": {"name": f"tool_{i}"}}
-            for i in range(49)
+            {"type": "function", "function": {"name": f"tool_{i}"}} for i in range(49)
         ]
         key = _tools_cache_key(tools)
         assert len(key) == 12

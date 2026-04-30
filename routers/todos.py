@@ -37,9 +37,7 @@ async def get_todos(request: Request, status: Optional[str] = None):
 
     try:
         if status:
-            todos = await todo_service.get_todos_by_status(
-                user_id, status
-            )
+            todos = await todo_service.get_todos_by_status(user_id, status)
         else:
             todos = await todo_service.get_todos_by_user(user_id)
 
@@ -118,9 +116,7 @@ async def get_todos_by_conversation(request: Request, conversation_id: int):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        todos = await todo_service.get_todos_by_conversation(
-            user_id, conversation_id
-        )
+        todos = await todo_service.get_todos_by_conversation(user_id, conversation_id)
         return todos
     except Exception as e:
         raise HTTPException(
@@ -136,9 +132,7 @@ async def get_todos_by_status(request: Request, status: str):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     try:
-        return await todo_service.get_todos_by_status(
-            user_id, status
-        )
+        return await todo_service.get_todos_by_status(user_id, status)
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error retrieving todos: {str(e)}"

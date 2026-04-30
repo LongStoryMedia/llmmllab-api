@@ -21,6 +21,7 @@ class MemoryService:
     def _get_storage(self):
         if self._storage is None:
             from db import storage  # pylint: disable=import-outside-toplevel
+
             if not storage.initialized or not storage.memory:
                 raise RuntimeError("Database not initialized")
             self._storage = storage.memory
@@ -30,6 +31,7 @@ class MemoryService:
     def available(self) -> bool:
         """Check if the service is available (DB initialized)."""
         from db import storage  # pylint: disable=import-outside-toplevel
+
         return storage.initialized and storage.memory is not None
 
     async def search_similarity(

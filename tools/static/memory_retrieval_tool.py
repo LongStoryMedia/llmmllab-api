@@ -109,7 +109,9 @@ async def memory_retrieval(
             )
             query_embeddings = await embed_client.aembed_documents([query])
         except Exception as embed_error:
-            logger.warning(f"Embedding generation failed: {embed_error}, using mock embeddings")
+            logger.warning(
+                f"Embedding generation failed: {embed_error}, using mock embeddings"
+            )
             query_embeddings = [[0.1] * 768]
 
         # If embeddings are still None, use fallback

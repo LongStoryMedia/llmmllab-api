@@ -252,7 +252,9 @@ class ApiKeyValidator:
         Returns None if API key is invalid, revoked, or expired.
         """
         try:
-            from services import api_key_service  # pylint: disable=import-outside-toplevel
+            from services import (
+                api_key_service,
+            )  # pylint: disable=import-outside-toplevel
 
             if not api_key_service.available:
                 raise RuntimeError(

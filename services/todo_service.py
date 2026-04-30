@@ -22,6 +22,7 @@ class TodoService:
     def _get_storage(self):
         if self._storage is None:
             from db import storage  # pylint: disable=import-outside-toplevel
+
             if not storage.initialized or not storage.todo:
                 raise RuntimeError("Database not initialized")
             self._storage = storage.todo
@@ -31,6 +32,7 @@ class TodoService:
     def available(self) -> bool:
         """Check if the service is available (DB initialized)."""
         from db import storage  # pylint: disable=import-outside-toplevel
+
         return storage.initialized and storage.todo is not None
 
     async def add_todo(self, todo: TodoItem) -> TodoItem:

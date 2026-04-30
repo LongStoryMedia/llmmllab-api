@@ -18,7 +18,7 @@ spec:
         - name: registry-secret
       containers:
         - name: llmmllab
-          image: 192.168.0.71:31500/llmmllab-api:main
+          image: 192.168.0.71:31500/llmmllab-api:latest
           imagePullPolicy: Always
           ports:
             - name: http

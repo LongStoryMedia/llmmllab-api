@@ -172,7 +172,17 @@ class LlmmlLogger:
         )
 
         # Suppress verbose third-party library logging (stainless/OpenAI SDK logs full request bodies at DEBUG)
-        for _lib in ("openai", "httpx", "httpcore", "anyio", "starlette"):
+        for _lib in (
+            "openai",
+            "httpx",
+            "httpcore",
+            "httpcore.connection",
+            "httpcore.http11",
+            "httpcore.proxy",
+            "hpack",
+            "anyio",
+            "starlette",
+        ):
             logging.getLogger(_lib).setLevel(logging.WARNING)
 
         self.logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(
