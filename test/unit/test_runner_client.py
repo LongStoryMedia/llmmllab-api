@@ -7,6 +7,7 @@ llmmllab-runner service instances.  The client now uses a persistent
 the ``httpx.AsyncClient`` constructor.
 """
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -105,9 +106,7 @@ class TestRunnerClientAcquire:
 
         client = RunnerClient(endpoints=["http://runner1:8000"])
         client._client = mock
-        handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
-
-        assert isinstance(handle, ServerHandle)
+        handle = await client.acquire_server("llama-3-8b", task=ModelTask.TEXTTOTEXT, config_override={})
         assert handle.server_id == "abc123"
         assert handle.base_url == "http://runner1:8000/v1/server/abc123"
         assert handle.runner_host == "http://runner1:8000"
@@ -125,7 +124,7 @@ class TestRunnerClientAcquire:
         )
         client._client = mock
         with pytest.raises(RuntimeError, match="No healthy runner"):
-            await client.acquire_server("llama-3-8b", "TextGeneration", {})
+            await client.acquire_server("llama-3-8b", task="TextGeneration", config_override={})
 
     @pytest.mark.asyncio
     async def test_acquire_retries_on_507(self):
@@ -170,9 +169,7 @@ class TestRunnerClientAcquire:
             endpoints=["http://runner1:8000", "http://runner2:8001"]
         )
         client._client = mock
-        handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
-
-        assert handle is not None
+        handle = await client.acquire_server("llama-3-8b", task=ModelTask.TEXTTOTEXT, config_override={})
         assert handle.server_id == "ghi789"
 
 
@@ -301,6 +298,21 @@ class TestRunnerClientModels:
         assert call_args[1].get("params", {}).get("task") == "TextToEmbeddings"
 
 
+class TestRunnerClientConfig:
+
+    def test_default_refresh_interval(self):
+        from config import MODEL_CACHE_REFRESH_SEC
+        assert MODEL_CACHE_REFRESH_SEC == 60
+
+    def test_refresh_interval_from_env(self, monkeypatch):
+        """MODEL_CACHE_REFRESH_SEC reads from env var."""
+        import importlib
+        monkeypatch.setenv("MODEL_CACHE_REFRESH_SEC", "120")
+        import config
+        importlib.reload(config)
+        assert config.MODEL_CACHE_REFRESH_SEC == 120
+
+
 class TestRunnerClientConnectionPooling:
     """Tests for the persistent client / connection pooling behavior."""
 
@@ -342,3 +354,153 @@ class TestRunnerClientConnectionPooling:
         """aclose() is safe when no client has been created."""
         client = RunnerClient(endpoints=["http://runner1:8000"])
         await client.aclose()  # should not raise
+
+
+class TestRunnerClientModelMap:
+    @pytest.mark.asyncio
+    async def test_refresh_builds_map(self):
+        r1 = MagicMock()
+        r1.status_code = 200
+        r1.json.return_value = [
+            {"id": "model-a", "name": "A", "model": "a", "task": "TextToText", "modified_at": "2025-01-01", "digest": "a", "provider": "llama_cpp", "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "8B", "size": 4e9, "original_ctx": 8192}},
+            {"id": "model-b", "name": "B", "model": "b", "task": "TextToText", "modified_at": "2025-01-01", "digest": "b", "provider": "llama_cpp", "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "7B", "size": 3e9, "original_ctx": 4096}},
+        ]
+        r2 = MagicMock()
+        r2.status_code = 200
+        r2.json.return_value = [
+            {"id": "model-b", "name": "B", "model": "b", "task": "TextToText", "modified_at": "2025-01-01", "digest": "b", "provider": "llama_cpp", "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "7B", "size": 3e9, "original_ctx": 4096}},
+            {"id": "model-c", "name": "C", "model": "c", "task": "TextToEmbeddings", "modified_at": "2025-01-01", "digest": "c", "provider": "llama_cpp", "details": {"format": "gguf", "family": "nomic", "families": ["nomic"], "parameter_size": "0.3B", "size": 2e8, "original_ctx": 8192}},
+        ]
+        idx = [0]
+        async def mock_get(url, **kw):
+            r = [r1, r2][idx[0]]; idx[0] += 1; return r
+        mock = _mock_client(get=AsyncMock(side_effect=mock_get))
+        client = RunnerClient(endpoints=["http://r1:8000", "http://r2:8001"])
+        client._client = mock
+        await client.refresh_model_map()
+        assert client._model_map["model-a"] == ["http://r1:8000"]
+        assert client._model_map["model-b"] == ["http://r1:8000", "http://r2:8001"]
+        assert client._model_map["model-c"] == ["http://r2:8001"]
+
+    @pytest.mark.asyncio
+    async def test_refresh_skips_unhealthy_runner(self):
+        r1 = MagicMock()
+        r1.status_code = 200
+        r1.json.return_value = [
+            {"id": "model-a", "name": "A", "model": "a", "task": "TextToText", "modified_at": "2025-01-01", "digest": "a", "provider": "llama_cpp", "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "8B", "size": 4e9, "original_ctx": 8192}},
+        ]
+        idx = [0]
+        async def mock_get(url, **kw):
+            v = [r1, Exception("conn refused")][idx[0]]; idx[0] += 1
+            if isinstance(v, Exception):
+                raise v
+            return v
+        mock = _mock_client(get=AsyncMock(side_effect=mock_get))
+        client = RunnerClient(endpoints=["http://r1:8000", "http://r2:8001"])
+        client._client = mock
+        await client.refresh_model_map()
+        assert client._model_map["model-a"] == ["http://r1:8000"]
+        assert all("http://r2:8001" not in v for v in client._model_map.values())
+
+
+class TestRunnerClientSlidingRefresh:
+    @pytest.mark.asyncio
+    async def test_schedule_refresh_on_acquire(self):
+        """Successful acquire_server schedules a refresh task."""
+        mock_health = MagicMock()
+        mock_health.status_code = 200
+        mock_health.json.return_value = {"status": "ok", "gpu": {"available_vram_bytes": 12e9}, "active_servers": 0, "models": ["model-a"]}
+        mock_create = MagicMock()
+        mock_create.status_code = 201
+        mock_create.json.return_value = {"server_id": "abc", "base_url": "http://r1:8000/v1/server/abc", "model": "model-a"}
+        mock_create.raise_for_status = MagicMock()
+        mock = _mock_client(get=AsyncMock(return_value=mock_health), post=AsyncMock(return_value=mock_create))
+        client = RunnerClient(endpoints=["http://r1:8000"])
+        client._client = mock
+        client._model_map = {"model-a": ["http://r1:8000"]}
+        handle = await client.acquire_server("model-a")
+        assert handle is not None
+        assert client._refresh_task is not None
+        assert isinstance(client._refresh_task, asyncio.Task)
+
+    @pytest.mark.asyncio
+    async def test_new_schedule_cancels_pending(self):
+        """A second acquire cancels the pending refresh from the first."""
+        mock_health = MagicMock()
+        mock_health.status_code = 200
+        mock_health.json.return_value = {"status": "ok", "gpu": {"available_vram_bytes": 12e9}, "active_servers": 0, "models": ["model-a"]}
+        mock_create = MagicMock()
+        mock_create.status_code = 201
+        mock_create.json.return_value = {"server_id": "abc", "base_url": "http://r1:8000/v1/server/abc", "model": "model-a"}
+        mock_create.raise_for_status = MagicMock()
+        mock = _mock_client(get=AsyncMock(return_value=mock_health), post=AsyncMock(return_value=mock_create))
+        client = RunnerClient(endpoints=["http://r1:8000"])
+        client._client = mock
+        client._model_map = {"model-a": ["http://r1:8000"]}
+        await client.acquire_server("model-a")
+        first_task = client._refresh_task
+        await client.acquire_server("model-a")
+        second_task = client._refresh_task
+        assert first_task is not second_task
+        with pytest.raises(asyncio.CancelledError):
+            await first_task
+        assert first_task.cancelled()
+
+
+class TestRunnerClientAcquireWithMap:
+    @pytest.mark.asyncio
+    async def test_acquire_uses_cached_map(self):
+        """acquire_server uses cached map, skips health checks."""
+        mock_create = MagicMock()
+        mock_create.status_code = 201
+        mock_create.json.return_value = {"server_id": "abc", "base_url": "http://r2:8001/v1/server/abc", "model": "model-c"}
+        mock_create.raise_for_status = MagicMock()
+        mock = _mock_client(post=AsyncMock(return_value=mock_create))
+        client = RunnerClient(endpoints=["http://r1:8000", "http://r2:8001"])
+        client._client = mock
+        client._model_map = {"model-a": ["http://r1:8000"], "model-c": ["http://r2:8001"]}
+        handle = await client.acquire_server("model-c")
+        assert handle.server_id == "abc"
+        assert handle.runner_host == "http://r2:8001"
+        # Should NOT have called get() for health check
+        mock.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_acquire_fallback_on_missing_model(self):
+        """Model not in map falls back to health-check scan."""
+        mock_health = MagicMock()
+        mock_health.status_code = 200
+        mock_health.json.return_value = {"status": "ok", "gpu": {"available_vram_bytes": 12e9}, "active_servers": 0, "models": ["model-x"]}
+        mock_create = MagicMock()
+        mock_create.status_code = 201
+        mock_create.json.return_value = {"server_id": "def", "base_url": "http://r1:8000/v1/server/def", "model": "model-x"}
+        mock_create.raise_for_status = MagicMock()
+        mock = _mock_client(get=AsyncMock(return_value=mock_health), post=AsyncMock(return_value=mock_create))
+        client = RunnerClient(endpoints=["http://r1:8000"])
+        client._client = mock
+        client._model_map = {}  # empty map
+        handle = await client.acquire_server("model-x")
+        assert handle.server_id == "def"
+        # Should have called get() for health check fallback
+        mock.get.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_acquire_fallback_on_507(self):
+        """507 on primary runner falls through to next in map."""
+        calls = [0]
+        async def mock_post(url, **kw):
+            calls[0] += 1
+            if calls[0] == 1:
+                r = MagicMock(); r.status_code = 507; return r
+            r = MagicMock()
+            r.status_code = 201
+            r.json.return_value = {"server_id": "ghi", "base_url": "http://r2:8001/v1/server/ghi", "model": "model-b"}
+            r.raise_for_status = MagicMock()
+            return r
+        mock = _mock_client(post=AsyncMock(side_effect=mock_post))
+        client = RunnerClient(endpoints=["http://r1:8000", "http://r2:8001"])
+        client._client = mock
+        client._model_map = {"model-b": ["http://r1:8000", "http://r2:8001"]}
+        handle = await client.acquire_server("model-b")
+        assert handle.server_id == "ghi"
+        assert handle.runner_host == "http://r2:8001"

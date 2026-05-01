@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from config import RUNNER_ENDPOINTS
+from config import MODEL_CACHE_REFRESH_SEC, RUNNER_ENDPOINTS
 from models import Model, ModelTask
 from utils.logging import llmmllogger
 
@@ -61,6 +61,8 @@ class RunnerClient:
         self._endpoints = endpoints if endpoints is not None else list(RUNNER_ENDPOINTS)
         self._healthy: list[str] = []
         self._client: Optional[httpx.AsyncClient] = None
+        self._model_map: Dict[str, List[str]] = {}
+        self._refresh_task: Optional[asyncio.Task] = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """Lazily create a shared ``httpx.AsyncClient``."""
@@ -77,6 +79,13 @@ class RunnerClient:
 
     async def aclose(self) -> None:
         """Close the shared HTTP client.  Call during app shutdown."""
+        if self._refresh_task is not None:
+            self._refresh_task.cancel()
+            try:
+                await self._refresh_task
+            except asyncio.CancelledError:
+                pass
+            self._refresh_task = None
         if self._client and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
@@ -130,16 +139,15 @@ class RunnerClient:
     # Server lifecycle
     # ------------------------------------------------------------------
 
-    async def acquire_server(
-        self,
-        model_id: str,
-        task: ModelTask,
-        config_override: Optional[Dict[str, Any]] = None,
-    ) -> ServerHandle:
+    async def acquire_server(self, model_id: str, **kwargs) -> ServerHandle:
         """Acquire a new llama.cpp server from a runner.
 
-        Tries runners in order of VRAM capacity. Handles 507 (Insufficient
-        Capacity) by falling through to the next runner.
+        Uses the cached model map for fast routing. Falls back to
+        health-check scan if the model isn't in the map.
+
+        Extra kwargs are accepted for forward compatibility with callers
+        that pass task/config_override. config_override is forwarded to
+        the runner if present.
 
         Returns:
             ServerHandle with connection details for the allocated server.
@@ -147,22 +155,25 @@ class RunnerClient:
         Raises:
             RuntimeError: if no runner can satisfy the request.
         """
-        config_override = config_override or {}
-        payload: dict[str, Any] = {
-            "model_id": model_id,
-            "config_override": config_override,
-        }
+        payload: dict[str, Any] = {"model_id": model_id}
+        config_override = kwargs.get("config_override")
+        if config_override:
+            payload["config_override"] = config_override
 
-        # Select the best runner by VRAM with matching model
-        best = await self._select_runner(model_id)
-        if best:
-            # Put best runner first, then the rest
-            ordered = [best]
-            for ep in self._endpoints:
-                if ep != best:
-                    ordered.append(ep)
+        # Fast path: use cached model map
+        mapped_endpoints = self._model_map.get(model_id)
+        if mapped_endpoints:
+            ordered = list(mapped_endpoints)
         else:
-            ordered = list(self._endpoints)
+            # Fallback: health-check scan
+            best = await self._select_runner(model_id)
+            if best:
+                ordered = [best]
+                for ep in self._endpoints:
+                    if ep != best:
+                        ordered.append(ep)
+            else:
+                ordered = list(self._endpoints)
 
         last_error = None
         for endpoint in ordered:
@@ -189,6 +200,7 @@ class RunnerClient:
                     runner_host=endpoint,
                 )
                 logger.info(f"Acquired server {handle.server_id} from {endpoint}")
+                self._schedule_refresh()
                 return handle
 
             except Exception as e:
@@ -226,6 +238,49 @@ class RunnerClient:
         except Exception as e:
             logger.error(f"Failed to shutdown server {handle.server_id}: {e}")
             raise
+
+    # ------------------------------------------------------------------
+    # Model map
+    # ------------------------------------------------------------------
+
+    async def refresh_model_map(self) -> None:
+        """Query all runners and build a model_id -> [endpoints] map."""
+        new_map: Dict[str, List[str]] = {}
+        client = self._get_client()
+        tasks = []
+        for endpoint in self._endpoints:
+            async def fetch_models(ep=endpoint):
+                try:
+                    resp = await client.get(f"{ep}/v1/models")
+                    if resp.status_code == 200:
+                        return [(m["id"], ep) for m in resp.json() if "id" in m]
+                except Exception as e:
+                    logger.warning(f"Failed to list models from {ep}: {e}")
+                return []
+            tasks.append(fetch_models())
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, list):
+                for model_id, endpoint in result:
+                    if model_id not in new_map:
+                        new_map[model_id] = []
+                    new_map[model_id].append(endpoint)
+        self._model_map = new_map
+        logger.info(f"Model map refreshed: {len(new_map)} models across {len(self._endpoints)} endpoints")
+
+    def _schedule_refresh(self) -> None:
+        """Schedule a model-map refresh after a delay, cancelling any pending one."""
+        if self._refresh_task is not None:
+            self._refresh_task.cancel()
+        async def _do_refresh():
+            try:
+                await asyncio.sleep(MODEL_CACHE_REFRESH_SEC)
+                await self.refresh_model_map()
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._refresh_task = None
+        self._refresh_task = asyncio.create_task(_do_refresh())
 
     # ------------------------------------------------------------------
     # Model discovery
