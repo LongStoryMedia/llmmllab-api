@@ -146,7 +146,8 @@ class RunnerClient:
         health-check scan if the model isn't in the map.
 
         Extra kwargs are accepted for forward compatibility with callers
-        that pass task/config_override (ignored, not used).
+        that pass task/config_override. config_override is forwarded to
+        the runner if present.
 
         Returns:
             ServerHandle with connection details for the allocated server.
@@ -155,6 +156,9 @@ class RunnerClient:
             RuntimeError: if no runner can satisfy the request.
         """
         payload: dict[str, Any] = {"model_id": model_id}
+        config_override = kwargs.get("config_override")
+        if config_override:
+            payload["config_override"] = config_override
 
         # Fast path: use cached model map
         mapped_endpoints = self._model_map.get(model_id)

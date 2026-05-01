@@ -117,6 +117,17 @@ async def lifespan(_: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize database schema: {e}")
 
+    # Warm up model-to-runner map so first requests use the fast path
+    try:
+        from services.runner_client import (
+            runner_client,
+        )  # pylint: disable=import-outside-toplevel
+
+        await runner_client.refresh_model_map()
+        logger.info("Runner model map warmed up")
+    except Exception as e:
+        logger.warning(f"Runner model map warm-up failed: {e}")
+
     try:
         yield  # Application runs here
     finally:
