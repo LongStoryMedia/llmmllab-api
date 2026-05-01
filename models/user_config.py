@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import List, Dict, Optional, Any, Union, Annotated, Literal
 from datetime import datetime, date, time, timedelta
+from .default_model_config import DefaultModelConfig
 from .event_stream_config import EventStreamConfig
 from .image_generation_config import ImageGenerationConfig
 from .memory_config import MemoryConfig
@@ -23,5 +24,6 @@ class UserConfig(BaseModel):
     workflow: Annotated[WorkflowConfig, Field(default=WorkflowConfig())]
     tool: Annotated[Optional[ToolConfig], Field(default=None)] = None
     event_stream: Annotated[Optional[EventStreamConfig], Field(default=None)] = None
+    default_model: Annotated[DefaultModelConfig, Field(default=DefaultModelConfig())]
 
     model_config = ConfigDict(extra="ignore", protected_namespaces=())

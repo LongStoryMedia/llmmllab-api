@@ -15,6 +15,7 @@ from services import (
     StreamAccumulator,
     TokenService,
     ToolService,
+    ModelService,
 )
 from graph.workflows.factory import WorkFlowType
 from graph.workflows.ide.builder import IDE_PRIMARY_SYSTEM_PROMPT
@@ -601,6 +602,11 @@ async def createMessage(
         claude_regex = regex.compile(r"claude|haiku|sonnet|opus", regex.IGNORECASE)
         if claude_regex.search(body.model):
             body.model = "Qwen3_6_27B"
+
+        # Resolve model: fall back to user's default_model if unavailable
+        resolved_model = await ModelResolver.resolve(body.model, user_id)
+        if resolved_model:
+            body.model = resolved_model
 
         client_tools = None
         tool_choice = None
