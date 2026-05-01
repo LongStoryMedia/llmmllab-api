@@ -301,6 +301,21 @@ class TestRunnerClientModels:
         assert call_args[1].get("params", {}).get("task") == "TextToEmbeddings"
 
 
+class TestRunnerClientConfig:
+
+    def test_default_refresh_interval(self):
+        from config import MODEL_CACHE_REFRESH_SEC
+        assert MODEL_CACHE_REFRESH_SEC == 60
+
+    def test_refresh_interval_from_env(self, monkeypatch):
+        """MODEL_CACHE_REFRESH_SEC reads from env var."""
+        import importlib
+        monkeypatch.setenv("MODEL_CACHE_REFRESH_SEC", "120")
+        import config
+        importlib.reload(config)
+        assert config.MODEL_CACHE_REFRESH_SEC == 120
+
+
 class TestRunnerClientConnectionPooling:
     """Tests for the persistent client / connection pooling behavior."""
 

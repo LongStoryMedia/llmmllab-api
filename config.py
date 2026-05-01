@@ -80,3 +80,5 @@ ENABLE_TOOL_CONTINUATION = (
 RUNNER_ENDPOINTS = os.environ.get("RUNNER_ENDPOINTS", "http://localhost:9000").split(
     ","
 )
+
+MODEL_CACHE_REFRESH_SEC = int(os.environ.get("MODEL_CACHE_REFRESH_SEC", "60"))
