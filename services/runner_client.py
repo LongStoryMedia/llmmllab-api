@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from config import RUNNER_ENDPOINTS
+from config import MODEL_CACHE_REFRESH_SEC, RUNNER_ENDPOINTS
 from models import Model, ModelTask
 from utils.logging import llmmllogger
 
@@ -79,6 +79,13 @@ class RunnerClient:
 
     async def aclose(self) -> None:
         """Close the shared HTTP client.  Call during app shutdown."""
+        if self._refresh_task is not None:
+            self._refresh_task.cancel()
+            try:
+                await self._refresh_task
+            except asyncio.CancelledError:
+                pass
+            self._refresh_task = None
         if self._client and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
@@ -135,7 +142,7 @@ class RunnerClient:
     async def acquire_server(
         self,
         model_id: str,
-        task: ModelTask,
+        task: Optional[ModelTask] = None,
         config_override: Optional[Dict[str, Any]] = None,
     ) -> ServerHandle:
         """Acquire a new llama.cpp server from a runner.
@@ -191,6 +198,7 @@ class RunnerClient:
                     runner_host=endpoint,
                 )
                 logger.info(f"Acquired server {handle.server_id} from {endpoint}")
+                self._schedule_refresh()
                 return handle
 
             except Exception as e:
@@ -257,6 +265,20 @@ class RunnerClient:
                     new_map[model_id].append(endpoint)
         self._model_map = new_map
         logger.info(f"Model map refreshed: {len(new_map)} models across {len(self._endpoints)} endpoints")
+
+    def _schedule_refresh(self) -> None:
+        """Schedule a model-map refresh after a delay, cancelling any pending one."""
+        if self._refresh_task is not None:
+            self._refresh_task.cancel()
+        async def _do_refresh():
+            try:
+                await asyncio.sleep(MODEL_CACHE_REFRESH_SEC)
+                await self.refresh_model_map()
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self._refresh_task = None
+        self._refresh_task = asyncio.create_task(_do_refresh())
 
     # ------------------------------------------------------------------
     # Model discovery

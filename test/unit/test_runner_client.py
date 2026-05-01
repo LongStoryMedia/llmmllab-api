@@ -7,6 +7,7 @@ llmmllab-runner service instances.  The client now uses a persistent
 the ``httpx.AsyncClient`` constructor.
 """
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -404,3 +405,47 @@ class TestRunnerClientModelMap:
         await client.refresh_model_map()
         assert client._model_map["model-a"] == ["http://r1:8000"]
         assert all("http://r2:8001" not in v for v in client._model_map.values())
+
+
+class TestRunnerClientSlidingRefresh:
+    @pytest.mark.asyncio
+    async def test_schedule_refresh_on_acquire(self):
+        """Successful acquire_server schedules a refresh task."""
+        mock_health = MagicMock()
+        mock_health.status_code = 200
+        mock_health.json.return_value = {"status": "ok", "gpu": {"available_vram_bytes": 12e9}, "active_servers": 0, "models": ["model-a"]}
+        mock_create = MagicMock()
+        mock_create.status_code = 201
+        mock_create.json.return_value = {"server_id": "abc", "base_url": "http://r1:8000/v1/server/abc", "model": "model-a"}
+        mock_create.raise_for_status = MagicMock()
+        mock = _mock_client(get=AsyncMock(return_value=mock_health), post=AsyncMock(return_value=mock_create))
+        client = RunnerClient(endpoints=["http://r1:8000"])
+        client._client = mock
+        client._model_map = {"model-a": ["http://r1:8000"]}
+        handle = await client.acquire_server("model-a")
+        assert handle is not None
+        assert client._refresh_task is not None
+        assert isinstance(client._refresh_task, asyncio.Task)
+
+    @pytest.mark.asyncio
+    async def test_new_schedule_cancels_pending(self):
+        """A second acquire cancels the pending refresh from the first."""
+        mock_health = MagicMock()
+        mock_health.status_code = 200
+        mock_health.json.return_value = {"status": "ok", "gpu": {"available_vram_bytes": 12e9}, "active_servers": 0, "models": ["model-a"]}
+        mock_create = MagicMock()
+        mock_create.status_code = 201
+        mock_create.json.return_value = {"server_id": "abc", "base_url": "http://r1:8000/v1/server/abc", "model": "model-a"}
+        mock_create.raise_for_status = MagicMock()
+        mock = _mock_client(get=AsyncMock(return_value=mock_health), post=AsyncMock(return_value=mock_create))
+        client = RunnerClient(endpoints=["http://r1:8000"])
+        client._client = mock
+        client._model_map = {"model-a": ["http://r1:8000"]}
+        await client.acquire_server("model-a")
+        first_task = client._refresh_task
+        await client.acquire_server("model-a")
+        second_task = client._refresh_task
+        assert first_task is not second_task
+        with pytest.raises(asyncio.CancelledError):
+            await first_task
+        assert first_task.cancelled()
