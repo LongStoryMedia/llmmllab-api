@@ -106,9 +106,7 @@ class TestRunnerClientAcquire:
 
         client = RunnerClient(endpoints=["http://runner1:8000"])
         client._client = mock
-        handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
-
-        assert isinstance(handle, ServerHandle)
+        handle = await client.acquire_server("llama-3-8b", task=ModelTask.TEXTTOTEXT, config_override={})
         assert handle.server_id == "abc123"
         assert handle.base_url == "http://runner1:8000/v1/server/abc123"
         assert handle.runner_host == "http://runner1:8000"
@@ -126,7 +124,7 @@ class TestRunnerClientAcquire:
         )
         client._client = mock
         with pytest.raises(RuntimeError, match="No healthy runner"):
-            await client.acquire_server("llama-3-8b", "TextGeneration", {})
+            await client.acquire_server("llama-3-8b", task="TextGeneration", config_override={})
 
     @pytest.mark.asyncio
     async def test_acquire_retries_on_507(self):
@@ -171,9 +169,7 @@ class TestRunnerClientAcquire:
             endpoints=["http://runner1:8000", "http://runner2:8001"]
         )
         client._client = mock
-        handle = await client.acquire_server("llama-3-8b", ModelTask.TEXTTOTEXT, {})
-
-        assert handle is not None
+        handle = await client.acquire_server("llama-3-8b", task=ModelTask.TEXTTOTEXT, config_override={})
         assert handle.server_id == "ghi789"
 
 
@@ -449,3 +445,62 @@ class TestRunnerClientSlidingRefresh:
         with pytest.raises(asyncio.CancelledError):
             await first_task
         assert first_task.cancelled()
+
+
+class TestRunnerClientAcquireWithMap:
+    @pytest.mark.asyncio
+    async def test_acquire_uses_cached_map(self):
+        """acquire_server uses cached map, skips health checks."""
+        mock_create = MagicMock()
+        mock_create.status_code = 201
+        mock_create.json.return_value = {"server_id": "abc", "base_url": "http://r2:8001/v1/server/abc", "model": "model-c"}
+        mock_create.raise_for_status = MagicMock()
+        mock = _mock_client(post=AsyncMock(return_value=mock_create))
+        client = RunnerClient(endpoints=["http://r1:8000", "http://r2:8001"])
+        client._client = mock
+        client._model_map = {"model-a": ["http://r1:8000"], "model-c": ["http://r2:8001"]}
+        handle = await client.acquire_server("model-c")
+        assert handle.server_id == "abc"
+        assert handle.runner_host == "http://r2:8001"
+        # Should NOT have called get() for health check
+        mock.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_acquire_fallback_on_missing_model(self):
+        """Model not in map falls back to health-check scan."""
+        mock_health = MagicMock()
+        mock_health.status_code = 200
+        mock_health.json.return_value = {"status": "ok", "gpu": {"available_vram_bytes": 12e9}, "active_servers": 0, "models": ["model-x"]}
+        mock_create = MagicMock()
+        mock_create.status_code = 201
+        mock_create.json.return_value = {"server_id": "def", "base_url": "http://r1:8000/v1/server/def", "model": "model-x"}
+        mock_create.raise_for_status = MagicMock()
+        mock = _mock_client(get=AsyncMock(return_value=mock_health), post=AsyncMock(return_value=mock_create))
+        client = RunnerClient(endpoints=["http://r1:8000"])
+        client._client = mock
+        client._model_map = {}  # empty map
+        handle = await client.acquire_server("model-x")
+        assert handle.server_id == "def"
+        # Should have called get() for health check fallback
+        mock.get.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_acquire_fallback_on_507(self):
+        """507 on primary runner falls through to next in map."""
+        calls = [0]
+        async def mock_post(url, **kw):
+            calls[0] += 1
+            if calls[0] == 1:
+                r = MagicMock(); r.status_code = 507; return r
+            r = MagicMock()
+            r.status_code = 201
+            r.json.return_value = {"server_id": "ghi", "base_url": "http://r2:8001/v1/server/ghi", "model": "model-b"}
+            r.raise_for_status = MagicMock()
+            return r
+        mock = _mock_client(post=AsyncMock(side_effect=mock_post))
+        client = RunnerClient(endpoints=["http://r1:8000", "http://r2:8001"])
+        client._client = mock
+        client._model_map = {"model-b": ["http://r1:8000", "http://r2:8001"]}
+        handle = await client.acquire_server("model-b")
+        assert handle.server_id == "ghi"
+        assert handle.runner_host == "http://r2:8001"

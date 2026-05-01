@@ -139,16 +139,14 @@ class RunnerClient:
     # Server lifecycle
     # ------------------------------------------------------------------
 
-    async def acquire_server(
-        self,
-        model_id: str,
-        task: Optional[ModelTask] = None,
-        config_override: Optional[Dict[str, Any]] = None,
-    ) -> ServerHandle:
+    async def acquire_server(self, model_id: str, **kwargs) -> ServerHandle:
         """Acquire a new llama.cpp server from a runner.
 
-        Tries runners in order of VRAM capacity. Handles 507 (Insufficient
-        Capacity) by falling through to the next runner.
+        Uses the cached model map for fast routing. Falls back to
+        health-check scan if the model isn't in the map.
+
+        Extra kwargs are accepted for forward compatibility with callers
+        that pass task/config_override (ignored, not used).
 
         Returns:
             ServerHandle with connection details for the allocated server.
@@ -156,22 +154,22 @@ class RunnerClient:
         Raises:
             RuntimeError: if no runner can satisfy the request.
         """
-        config_override = config_override or {}
-        payload: dict[str, Any] = {
-            "model_id": model_id,
-            "config_override": config_override,
-        }
+        payload: dict[str, Any] = {"model_id": model_id}
 
-        # Select the best runner by VRAM with matching model
-        best = await self._select_runner(model_id)
-        if best:
-            # Put best runner first, then the rest
-            ordered = [best]
-            for ep in self._endpoints:
-                if ep != best:
-                    ordered.append(ep)
+        # Fast path: use cached model map
+        mapped_endpoints = self._model_map.get(model_id)
+        if mapped_endpoints:
+            ordered = list(mapped_endpoints)
         else:
-            ordered = list(self._endpoints)
+            # Fallback: health-check scan
+            best = await self._select_runner(model_id)
+            if best:
+                ordered = [best]
+                for ep in self._endpoints:
+                    if ep != best:
+                        ordered.append(ep)
+            else:
+                ordered = list(self._endpoints)
 
         last_error = None
         for endpoint in ordered:
