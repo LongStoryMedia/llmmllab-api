@@ -357,3 +357,50 @@ class TestRunnerClientConnectionPooling:
         """aclose() is safe when no client has been created."""
         client = RunnerClient(endpoints=["http://runner1:8000"])
         await client.aclose()  # should not raise
+
+
+class TestRunnerClientModelMap:
+    @pytest.mark.asyncio
+    async def test_refresh_builds_map(self):
+        r1 = MagicMock()
+        r1.status_code = 200
+        r1.json.return_value = [
+            {"id": "model-a", "name": "A", "model": "a", "task": "TextToText", "modified_at": "2025-01-01", "digest": "a", "provider": "llama_cpp", "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "8B", "size": 4e9, "original_ctx": 8192}},
+            {"id": "model-b", "name": "B", "model": "b", "task": "TextToText", "modified_at": "2025-01-01", "digest": "b", "provider": "llama_cpp", "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "7B", "size": 3e9, "original_ctx": 4096}},
+        ]
+        r2 = MagicMock()
+        r2.status_code = 200
+        r2.json.return_value = [
+            {"id": "model-b", "name": "B", "model": "b", "task": "TextToText", "modified_at": "2025-01-01", "digest": "b", "provider": "llama_cpp", "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "7B", "size": 3e9, "original_ctx": 4096}},
+            {"id": "model-c", "name": "C", "model": "c", "task": "TextToEmbeddings", "modified_at": "2025-01-01", "digest": "c", "provider": "llama_cpp", "details": {"format": "gguf", "family": "nomic", "families": ["nomic"], "parameter_size": "0.3B", "size": 2e8, "original_ctx": 8192}},
+        ]
+        idx = [0]
+        async def mock_get(url, **kw):
+            r = [r1, r2][idx[0]]; idx[0] += 1; return r
+        mock = _mock_client(get=AsyncMock(side_effect=mock_get))
+        client = RunnerClient(endpoints=["http://r1:8000", "http://r2:8001"])
+        client._client = mock
+        await client.refresh_model_map()
+        assert client._model_map["model-a"] == ["http://r1:8000"]
+        assert client._model_map["model-b"] == ["http://r1:8000", "http://r2:8001"]
+        assert client._model_map["model-c"] == ["http://r2:8001"]
+
+    @pytest.mark.asyncio
+    async def test_refresh_skips_unhealthy_runner(self):
+        r1 = MagicMock()
+        r1.status_code = 200
+        r1.json.return_value = [
+            {"id": "model-a", "name": "A", "model": "a", "task": "TextToText", "modified_at": "2025-01-01", "digest": "a", "provider": "llama_cpp", "details": {"format": "gguf", "family": "llama", "families": ["llama"], "parameter_size": "8B", "size": 4e9, "original_ctx": 8192}},
+        ]
+        idx = [0]
+        async def mock_get(url, **kw):
+            v = [r1, Exception("conn refused")][idx[0]]; idx[0] += 1
+            if isinstance(v, Exception):
+                raise v
+            return v
+        mock = _mock_client(get=AsyncMock(side_effect=mock_get))
+        client = RunnerClient(endpoints=["http://r1:8000", "http://r2:8001"])
+        client._client = mock
+        await client.refresh_model_map()
+        assert client._model_map["model-a"] == ["http://r1:8000"]
+        assert all("http://r2:8001" not in v for v in client._model_map.values())

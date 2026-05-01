@@ -61,6 +61,8 @@ class RunnerClient:
         self._endpoints = endpoints if endpoints is not None else list(RUNNER_ENDPOINTS)
         self._healthy: list[str] = []
         self._client: Optional[httpx.AsyncClient] = None
+        self._model_map: Dict[str, List[str]] = {}
+        self._refresh_task: Optional[asyncio.Task] = None
 
     def _get_client(self) -> httpx.AsyncClient:
         """Lazily create a shared ``httpx.AsyncClient``."""
@@ -226,6 +228,35 @@ class RunnerClient:
         except Exception as e:
             logger.error(f"Failed to shutdown server {handle.server_id}: {e}")
             raise
+
+    # ------------------------------------------------------------------
+    # Model map
+    # ------------------------------------------------------------------
+
+    async def refresh_model_map(self) -> None:
+        """Query all runners and build a model_id -> [endpoints] map."""
+        new_map: Dict[str, List[str]] = {}
+        client = self._get_client()
+        tasks = []
+        for endpoint in self._endpoints:
+            async def fetch_models(ep=endpoint):
+                try:
+                    resp = await client.get(f"{ep}/v1/models")
+                    if resp.status_code == 200:
+                        return [(m["id"], ep) for m in resp.json() if "id" in m]
+                except Exception as e:
+                    logger.warning(f"Failed to list models from {ep}: {e}")
+                return []
+            tasks.append(fetch_models())
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, list):
+                for model_id, endpoint in result:
+                    if model_id not in new_map:
+                        new_map[model_id] = []
+                    new_map[model_id].append(endpoint)
+        self._model_map = new_map
+        logger.info(f"Model map refreshed: {len(new_map)} models across {len(self._endpoints)} endpoints")
 
     # ------------------------------------------------------------------
     # Model discovery
