@@ -385,14 +385,19 @@ The current date is {current_date}."""
                 e,
                 message_count=get_message_count(messages),
             )
-            # Re-raise timeout errors so the workflow executor catches them
-            # and yields an error response with content.  Without this, the
-            # timeout is swallowed, the executor sees no LLM events, and
-            # produces an empty response — which triggers the completion
-            # service to retry (creating a cascade of wasted requests).
-            from openai import APITimeoutError
+            # Re-raise timeout and server-error (503) so the workflow
+            # executor catches them and yields an error response with
+            # content.  Without this, the error is swallowed, the executor
+            # sees no LLM events, and produces an empty response — which
+            # triggers the completion service to retry (creating a cascade
+            # of wasted requests).
+            from openai import APITimeoutError, APIStatusError
 
             if isinstance(e, (APITimeoutError, TimeoutError)):
+                raise
+            # 503 = upstream runner slots busy — don't swallow, let the
+            # executor surface it so the completion service doesn't retry.
+            if isinstance(e, APIStatusError) and e.status_code == 503:
                 raise
             return ChatResponse(
                 done=True,
