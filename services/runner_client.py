@@ -90,13 +90,14 @@ class RunnerClient:
         *,
         json: Optional[Dict[str, Any]] = None,
         stream: bool = False,
-        max_retries: int = 1,  # retry once on 503
+        timeout: float = 120.0,  # total backoff budget in seconds
     ) -> httpx.Response:
         """Send a request to a server handle, respecting Retry-After on 503.
 
         When the runner proxy returns 503 (all slots busy), reads the
-        ``Retry-After`` header and sleeps before retrying.  After the
-        configured number of retries the original 503 response is returned.
+        ``Retry-After`` header and sleeps before retrying.  Uses
+        exponential backoff (2 s, 4 s, 8 s, …) capped by the ``Retry-After``
+        value, and stops when the cumulative backoff would exceed *timeout*.
 
         Parameters
         ----------
@@ -111,19 +112,65 @@ class RunnerClient:
         stream:
             If ``True`` the caller is responsible for draining and closing
             the response.
-        max_retries:
-            Number of retries on 503 (default 1).
+        timeout:
+            Total backoff budget in seconds.  Once the cumulative sleep
+            would exceed this, the last 503 response is returned.
 
         Returns
         -------
         httpx.Response
-            The final response (may still be 503 if retries exhausted).
+            The final response (may still be 503 if timeout exhausted).
         """
         url = f"{handle.base_url}/{path.lstrip('/')}"
         client = self._get_client()
 
-        last_response = None
-        for attempt in range(max_retries + 1):
+        # First attempt (no backoff yet)
+        response = await client.request(
+            method=method,
+            url=url,
+            json=json,
+            timeout=_ACQUIRE_TIMEOUT,
+            stream=stream,
+        )
+
+        if response.status_code != 503:
+            return response
+
+        last_response = response
+        elapsed = 0.0
+        attempt = 0
+
+        while elapsed < timeout:
+            attempt += 1
+
+            # Read Retry-After header (seconds as integer)
+            retry_after = 30  # default fallback
+            retry_header = response.headers.get("retry-after")
+            if retry_header:
+                try:
+                    retry_after = int(retry_header)
+                except (ValueError, TypeError):
+                    pass
+
+            # Exponential backoff: 2^attempt seconds, capped by Retry-After
+            backoff = min(2**attempt, retry_after)
+
+            if elapsed + backoff > timeout:
+                break
+
+            logger.warning(
+                "Runner returned 503, backing off before retry",
+                extra={
+                    "server_id": handle.server_id,
+                    "retry_after": retry_after,
+                    "backoff": backoff,
+                    "attempt": attempt,
+                    "elapsed": round(elapsed, 1),
+                },
+            )
+            await asyncio.sleep(backoff)
+            elapsed += backoff
+
             response = await client.request(
                 method=method,
                 url=url,
@@ -137,34 +184,14 @@ class RunnerClient:
 
             last_response = response
 
-            # Read Retry-After header (seconds as integer)
-            retry_after = 30  # default fallback
-            retry_header = response.headers.get("retry-after")
-            if retry_header:
-                try:
-                    retry_after = int(retry_header)
-                except (ValueError, TypeError):
-                    pass
-
-            if attempt < max_retries:
-                logger.warning(
-                    "Runner returned 503, backing off before retry",
-                    extra={
-                        "server_id": handle.server_id,
-                        "retry_after": retry_after,
-                        "attempt": attempt + 1,
-                        "max_retries": max_retries,
-                    },
-                )
-                await asyncio.sleep(retry_after)
-            else:
-                logger.error(
-                    "Runner returned 503 after all retries exhausted",
-                    extra={
-                        "server_id": handle.server_id,
-                        "retry_after": retry_after,
-                    },
-                )
+        logger.error(
+            "Runner returned 503 after backoff timeout",
+            extra={
+                "server_id": handle.server_id,
+                "elapsed": round(elapsed, 1),
+                "timeout": timeout,
+            },
+        )
 
         return last_response
 
