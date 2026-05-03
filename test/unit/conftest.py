@@ -4,7 +4,6 @@ import pytest
 from unittest.mock import MagicMock
 from typing import Dict
 
-import torch
 from models.model import Model
 from models.model_details import ModelDetails
 from models.lora_weight import LoraWeight
