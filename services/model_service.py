@@ -21,10 +21,24 @@ logger = llmmllogger.bind(component="model_service")
 
 
 class ModelService:
-    """Stateless helper that resolves model names against available runners."""
+    """Resolves model names against available runners.
 
-    @staticmethod
+    Singleton — use ``model_service`` from ``services``.
+    """
+
+    def __init__(self):
+        self._cached_model_ids: Optional[set[str]] = None
+        self._user_config_service = None
+
+    def _get_user_config_service(self):
+        if self._user_config_service is None:
+            from services import user_config_service  # noqa: F811
+
+            self._user_config_service = user_config_service
+        return self._user_config_service
+
     async def resolve_default_model(
+        self,
         requested_model: Optional[str],
         user_id: str,
     ) -> str:
@@ -42,16 +56,14 @@ class ModelService:
         str
             The resolved model ID.
         """
-        from db import storage  # lazy import to avoid circular deps
-
         # Fast path: requested model is available on a runner
         if requested_model:
-            available = await ModelService._available_model_ids()
+            available = await self._available_model_ids()
             if requested_model in available:
                 return requested_model
 
             # Requested model not found — try user's default_model
-            fallback = await ModelService._user_default_model(user_id)
+            fallback = await self._user_default_model(user_id)
             if fallback:
                 logger.info(
                     "Requested model not available, falling back to default_model",
@@ -71,11 +83,11 @@ class ModelService:
             return requested_model
 
         # No model specified — use user's default_model
-        fallback = await ModelService._user_default_model(user_id)
+        fallback = await self._user_default_model(user_id)
         if fallback:
             return fallback
 
-        # Nothing to fall back to — return None so downstream errors
+        # Nothing to fall back to — return empty so downstream errors
         logger.warning(
             "No model specified and no default_model configured",
             extra={"user_id": user_id},
@@ -86,32 +98,26 @@ class ModelService:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    _cached_model_ids: Optional[set[str]] = None
-
-    @staticmethod
-    async def _available_model_ids() -> set[str]:
+    async def _available_model_ids(self) -> set[str]:
         """Return the set of model IDs currently available on any runner."""
-        if ModelService._cached_model_ids is not None:
-            return ModelService._cached_model_ids
+        if self._cached_model_ids is not None:
+            return self._cached_model_ids
 
         from services.runner_client import runner_client
 
         try:
             models = await runner_client.list_models()
-            ModelService._cached_model_ids = {m.id for m in models if m.id}
+            self._cached_model_ids = {m.id for m in models if m.id}
         except Exception as e:
             logger.warning(f"Failed to list models from runners: {e}")
-            ModelService._cached_model_ids = set()
+            self._cached_model_ids = set()
 
-        return ModelService._cached_model_ids
+        return self._cached_model_ids
 
-    @staticmethod
-    async def _user_default_model(user_id: str) -> Optional[str]:
+    async def _user_default_model(self, user_id: str) -> Optional[str]:
         """Look up the user's configured default_model."""
-        from db import storage
-
         try:
-            config = await storage.user_config.get_user_config(user_id)
+            config = await self._get_user_config_service().get_user_config(user_id)
             if config and hasattr(config, "default_model") and config.default_model:
                 return config.default_model
         except Exception as e:
@@ -121,7 +127,10 @@ class ModelService:
 
         return None
 
-    @staticmethod
-    def invalidate_cache() -> None:
+    def invalidate_cache(self) -> None:
         """Clear the cached model list (call when models change)."""
-        ModelService._cached_model_ids = None
+        self._cached_model_ids = None
+
+
+# Singleton instance
+model_service = ModelService()
