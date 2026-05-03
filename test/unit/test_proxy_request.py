@@ -112,14 +112,14 @@ class TestProxyRequestRetryAfter:
         client = RunnerClient(endpoints=["http://runner:8000"])
         client._client = mock
 
-        # timeout=5 means we can't sleep 30s, so it should give up quickly
+        # timeout=5: first backoff is min(2^1, 30)=2s (fits), second is min(2^2,30)=4s
+        # (2+4=6 > 5) so it stops after 2 attempts
         result = await client.proxy_request(
             HANDLE, "POST", "/v1/chat/completions", json={}, timeout=5.0
         )
 
         assert result.status_code == 503
-        # Only one attempt because 30s default > 5s timeout
-        assert call_count[0] == 1
+        assert call_count[0] == 2
 
 
 class TestProxyRequestExponentialBackoff:
@@ -174,7 +174,7 @@ class TestProxyRequestExponentialBackoff:
         call_count = [0]
         async def mock_request(*a, **kw):
             call_count[0] += 1
-            return resp_503 if call_count[0] < 3 else resp_200
+            return resp_503 if call_count[0] < 4 else resp_200
 
         mock = _mock_client(request=AsyncMock(side_effect=mock_request))
 
