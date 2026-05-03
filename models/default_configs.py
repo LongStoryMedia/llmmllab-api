@@ -109,7 +109,6 @@ DEFAULT_TOOL_CONFIG = ToolConfig(
     search_top_k=10,
 )
 
-
 # Function to create a default user config
 def create_default_user_config(user_id: str) -> UserConfig:
     """Create a default user configuration with predefined defaults for all settings"""

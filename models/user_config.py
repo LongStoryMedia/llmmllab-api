@@ -23,5 +23,7 @@ class UserConfig(BaseModel):
     workflow: Annotated[WorkflowConfig, Field(default=WorkflowConfig())]
     tool: Annotated[Optional[ToolConfig], Field(default=None)] = None
     event_stream: Annotated[Optional[EventStreamConfig], Field(default=None)] = None
+    default_model: Annotated[Optional[str], Field(default=None)] = None
+    """Model ID to use as a fallback when no model is specified or the requested model is unavailable."""
 
     model_config = ConfigDict(extra="ignore", protected_namespaces=())
