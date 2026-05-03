@@ -15,7 +15,7 @@ responsibility:
   • ``DocumentService``       — document upload and retrieval
   • ``MemoryService``         — memory search and storage
   • ``SummaryService``        — conversation summary retrieval
-  • ``ModelResolver``         — resolve effective model (fallback to default_model)
+  • ``ModelService``          — resolve effective model (fallback to default_model)
 """
 
 from .token_service import TokenService
@@ -25,7 +25,7 @@ from .completion_service import (
     CompletionResult,
     StreamAccumulator,
 )
-from .model_resolver import ModelResolver
+from .model_service import ModelService
 from .user_config_service import UserConfigService, user_config_service
 from .conversation_service import ConversationService, conversation_service
 from .message_service import MessageService, message_service
@@ -42,7 +42,7 @@ __all__ = [
     "CompletionService",
     "CompletionResult",
     "StreamAccumulator",
-    "ModelResolver",
+    "ModelService",
     "UserConfigService",
     "user_config_service",
     "ConversationService",

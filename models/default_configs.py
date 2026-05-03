@@ -8,7 +8,6 @@ where these defaults need to be updated.
 
 import uuid
 
-from .default_model_config import DefaultModelConfig
 from .preferences_config import PreferencesConfig
 from .memory_config import MemoryConfig
 from .summarization_config import SummarizationConfig
@@ -110,10 +109,6 @@ DEFAULT_TOOL_CONFIG = ToolConfig(
     search_top_k=10,
 )
 
-# Default model configuration
-DEFAULT_DEFAULT_MODEL_CONFIG = DefaultModelConfig(default_model=None)
-
-
 # Function to create a default user config
 def create_default_user_config(user_id: str) -> UserConfig:
     """Create a default user configuration with predefined defaults for all settings"""
@@ -122,5 +117,4 @@ def create_default_user_config(user_id: str) -> UserConfig:
         memory=DEFAULT_MEMORY_CONFIG,
         summarization=DEFAULT_SUMMARIZATION_CONFIG,
         image_generation=DEFAULT_IMAGE_GENERATION_CONFIG,
-        default_model=DEFAULT_DEFAULT_MODEL_CONFIG,
     )

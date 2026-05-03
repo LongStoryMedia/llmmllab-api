@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from middleware.auth import get_user_id
-from services import CompletionService, ModelResolver
+from services import CompletionService, ModelService
 from graph.state import ServerToolEvent
 from models.openai.chat_completion_deleted import ChatCompletionDeleted
 from models.openai.chat_completion_list import ChatCompletionList
@@ -518,7 +518,7 @@ async def createChatCompletion(
     internal_messages = messages_from_openai(body.messages)
 
     # Resolve model: fall back to user's default_model if unavailable
-    resolved_model = await ModelResolver.resolve(body.model, user_id)
+    resolved_model = await ModelService.resolve_default_model(body.model, user_id)
     if resolved_model:
         body.model = resolved_model
 

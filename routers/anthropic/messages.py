@@ -604,7 +604,7 @@ async def createMessage(
             body.model = "Qwen3_6_27B"
 
         # Resolve model: fall back to user's default_model if unavailable
-        resolved_model = await ModelResolver.resolve(body.model, user_id)
+        resolved_model = await ModelService.resolve_default_model(body.model, user_id)
         if resolved_model:
             body.model = resolved_model
 
