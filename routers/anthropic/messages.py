@@ -11,11 +11,13 @@ import regex
 
 from middleware.auth import get_user_id
 from services import (
-    TokenService,
-    ToolService,
     CompletionService,
     StreamAccumulator,
+    TokenService,
+    ToolService,
 )
+from graph.workflows.factory import WorkFlowType
+from graph.workflows.ide.builder import IDE_PRIMARY_SYSTEM_PROMPT
 from models.anthropic.create_message_request import CreateMessageRequest
 from models.anthropic.message_response import MessageResponse
 from models.anthropic.count_tokens_request import CountTokensRequest
@@ -320,8 +322,25 @@ async def stream_message(
 
     msg_id = f"msg_{uuid.uuid4().hex[:24]}"
 
-    # Pre-compute input token estimate
-    input_tokens = await TokenService.count_input_tokens(messages, client_tools)
+    # Build workflow first so we have a server for accurate token counting.
+    # The workflow is cached, so stream_completion's internal build will
+    # hit the cache and return immediately.
+    _, _, server_url = await CompletionService.build_workflow(
+        user_id=user_id,
+        model_name=model_name,
+        workflow_type=WorkFlowType.IDE,
+        client_tools=client_tools,
+        tool_choice=tool_choice,
+        server_tool_names=server_tool_names or None,
+    )
+
+    # Count tokens using the real llama.cpp tokenizer
+    input_tokens = await TokenService.count_input_tokens(
+        messages,
+        client_tools,
+        server_url=server_url,
+        system_prompt=IDE_PRIMARY_SYSTEM_PROMPT,
+    )
 
     yield _sse(
         "message_start",

@@ -1,18 +1,16 @@
 """
 Agent node for workflow execution.
-Executes the chat agent with optional tool support and summarization middleware.
+Executes the chat agent with optional tool support.
 """
 
-from typing import List, Optional, Type
+from typing import Optional, Type
 from pydantic import BaseModel
 
-from langchain.agents.middleware import AgentMiddleware
 from langchain_core.runnables import RunnableLambda
 
 from tools.registry import ToolRegistry
 from agents.chat import ChatAgent
 from graph.state import WorkflowState
-from graph.middleware.summarization_middleware import SummarizationMiddleware
 from constants import AGENT_NODE_NAME, STRUCTURED_AGENT_RUNNABLE_NAME
 
 from models import NodeMetadata, Message, MessageRole
@@ -21,7 +19,7 @@ from utils.logging import llmmllogger
 
 class AgentNode:
     """
-    Executes the chat agent with optional tool support and summarization middleware.
+    Executes the chat agent with optional tool support.
 
     When tool_registry is provided, tools are passed to the agent for tool-calling.
     When tool_registry is None, the agent runs without tools (passthrough mode).
@@ -51,16 +49,6 @@ class AgentNode:
         """
         assert state.conversation_id is not None
         try:
-            n_ctx = self.agent.num_ctx
-            max_tokens_before_summary = int(n_ctx * 0.95)
-            middleware: List[AgentMiddleware] = [
-                SummarizationMiddleware(
-                    agent=self.agent,
-                    max_tokens_before_summary=max_tokens_before_summary,
-                    conversation_id=state.conversation_id,
-                )
-            ]
-
             tools = (
                 self.tool_registry.get_all_executable_tools()
                 if self.tool_registry
@@ -72,7 +60,6 @@ class AgentNode:
                 structured_response = await self.agent.run_structured(
                     message_input=state.messages,
                     tools=tools,
-                    middleware=middleware,
                     grammar=self.grammar,
                 )
 
@@ -99,7 +86,6 @@ class AgentNode:
                 response = await self.agent.run(
                     messages=state.messages,
                     tools=tools,
-                    middleware=middleware,
                 )
 
                 if response.message:

@@ -1,0 +1,419 @@
+# Grafana - dashboards and visualization
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: llmmllab
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.llmmllab.svc.cluster.local:9090
+        isDefault: true
+        editable: true
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.llmmllab.svc.cluster.local:3100
+        editable: true
+      - name: Tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.llmmllab.svc.cluster.local:3200
+        editable: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: llmmllab
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: "llmmllab"
+        orgId: 1
+        folder: "llmmllab"
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: false
+  api-dashboard.json: |
+    {
+      "id": null,
+      "uid": "llmmllab-api",
+      "title": "llmmllab-api Dashboard",
+      "tags": ["llmmllab", "api"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Request Rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{job=\"llmmllab-api\"}[5m])) by (status)",
+              "legendFormat": "{{status}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Request Latency",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"llmmllab-api\"}[5m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"llmmllab-api\"}[5m])) by (le))",
+              "legendFormat": "p50"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Workflow Completions",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "sum(rate(workflow_completions_total{job=\"llmmllab-api\"}[5m])) by (status)",
+              "legendFormat": "{{status}}"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Empty Response Retries",
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [
+            {
+              "expr": "sum(increase(empty_response_retries_total{job=\"llmmllab-api\"}[1h]))",
+              "legendFormat": "retries/hour"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Active Connections",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "targets": [
+            {
+              "expr": "http_active_connections{job=\"llmmllab-api\"}",
+              "legendFormat": "active"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Logs by Level",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (level) (rate({namespace=\"llmmllab\", app=\"llmmllab-api\"}[$__rate_interval]))"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Error Logs",
+          "type": "logs",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{namespace=\"llmmllab\", app=\"llmmllab-api\", level=\"error\"} | json"
+            }
+          ],
+          "options": {
+            "showLabels": true,
+            "showCommonLabels": true,
+            "wrapLogMessage": true
+          }
+        }
+      ]
+    }
+  runner-dashboard.json: |
+    {
+      "id": null,
+      "uid": "llmmllab-runner",
+      "title": "llmmllab-runner Dashboard",
+      "tags": ["llmmllab", "runner"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Active llama.cpp Servers",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "llama_servers_active",
+              "legendFormat": "{{runner_name}}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Server Starts",
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(increase(llama_server_starts_total[1h])) by (model_id)",
+              "legendFormat": "{{model_id}}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "GPU Temperature",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "gpu_temperature_celsius",
+              "legendFormat": "GPU {{gpu_index}} ({{runner_name}})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 70},
+                  {"color": "orange", "value": 78},
+                  {"color": "red", "value": 88}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "GPU Memory Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [
+            {
+              "expr": "gpu_memory_used_bytes",
+              "legendFormat": "GPU {{gpu_index}} ({{runner_name}})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "GPU Power",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "targets": [
+            {
+              "expr": "gpu_power_watts",
+              "legendFormat": "GPU {{gpu_index}} ({{runner_name}})"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt"
+            }
+          }
+        },
+        {
+          "id": 6,
+          "title": "Server Evictions",
+          "type": "stat",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "targets": [
+            {
+              "expr": "sum(increase(llama_server_evictions_total[1h])) by (reason)",
+              "legendFormat": "{{reason}}"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Request Rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total[5m])) by (status, job)",
+              "legendFormat": "{{job}} {{status}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            }
+          }
+        },
+        {
+          "id": 8,
+          "title": "Error Logs",
+          "type": "logs",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "{namespace=\"llmmllab\", app=~\"llmmllab-runner.*\", level=\"error\"} | json"
+            }
+          ],
+          "options": {
+            "showLabels": true,
+            "showCommonLabels": true,
+            "wrapLogMessage": true
+          }
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-admin
+  namespace: llmmllab
+type: Opaque
+stringData:
+  admin-user: admin
+  admin-password: llmmllab-admin
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: llmmllab
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: llmmllab
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:12.0.0
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-config
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: data
+              mountPath: /var/lib/grafana/data
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards-config
+          configMap:
+            name: grafana-dashboards
+            items:
+              - key: dashboards.yaml
+                path: dashboards.yaml
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+            items:
+              - key: api-dashboard.json
+                path: api-dashboard.json
+              - key: runner-dashboard.json
+                path: runner-dashboard.json
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: llmmllab
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  type: ClusterIP

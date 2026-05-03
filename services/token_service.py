@@ -1,5 +1,5 @@
 import json
-from typing import Optional
+from typing import Any, Optional
 import httpx
 from models.message import Message, MessageContentType
 from utils.logging import llmmllogger
@@ -25,12 +25,15 @@ class TokenService:
         return 131_072
 
     @staticmethod
-    async def count_input_tokens(
+    def _combine_text(
         messages: list[Message],
         tools: Optional[list] = None,
-        server_url: Optional[str] = None,
-    ) -> int:
+        system_prompt: Optional[str] = None,
+    ) -> str:
+        """Combine messages, tools, and system prompt into a single text block."""
         parts: list[str] = []
+        if system_prompt:
+            parts.append(f"<|system|>\n{system_prompt}")
         for msg in messages:
             role_tag = msg.role.value if msg.role else "user"
             text = ""
@@ -45,9 +48,20 @@ class TokenService:
             for tool in tools:
                 if isinstance(tool, dict):
                     parts.append(json.dumps(tool))
-                else:
+                elif hasattr(tool, "model_dump"):
                     parts.append(json.dumps(tool.model_dump(exclude_none=True)))
-        combined_text = "\n".join(parts)
+                else:
+                    parts.append(json.dumps(tool))
+        return "\n".join(parts)
+
+    @staticmethod
+    async def count_input_tokens(
+        messages: list[Message],
+        tools: Optional[list] = None,
+        server_url: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+    ) -> int:
+        combined_text = TokenService._combine_text(messages, tools, system_prompt)
         if server_url:
             try:
                 async with httpx.AsyncClient(timeout=10) as client:
@@ -56,9 +70,9 @@ class TokenService:
                         json={"content": combined_text},
                     )
                     if resp.status_code == 200:
-                        data = resp.json()
+                        data: dict[str, Any] = resp.json()
                         tokens = data.get("tokens", [])
                         return len(tokens)
             except Exception as e:
                 logger.debug(f"llama-server tokenize unavailable, using estimate: {e}")
-        return max(1, len(combined_text) // 4)
+        return max(1, len(combined_text) // 3)

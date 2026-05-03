@@ -122,15 +122,18 @@ spec:
               value: "192.168.0.0/24,10.43.0.0/16"
             - name: LOG_LEVEL
               value: "debug"
-            - name: FORCE_COLOR
-              value: "1"
+            - name: LOG_FORMAT
+              value: "json"
             - name: API_VERSION
               value: "v1"
             - name: SEARX_HOST
               value: "http://searxng.searxng.svc.cluster.local:8080"
             - name: RUNNER_ENDPOINTS
-              value: "http://llmmllab-runner.llmmllab.svc.cluster.local:8000"
+              value: "http://llmmllab-runner.llmmllab.svc.cluster.local:8000,http://llmmllab-\
+                runner-small.llmmllab.svc.cluster.local:8000"
             - name: PORT
               value: "9999"
+            - name: TEMPO_ENDPOINT
+              value: "http://tempo.llmmllab.svc.cluster.local:4317"
   strategy:
     type: Recreate

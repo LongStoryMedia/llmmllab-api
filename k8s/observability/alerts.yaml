@@ -1,0 +1,58 @@
+# Prometheus alerting rules
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-alerts
+  namespace: llmmllab
+data:
+  alerts.yml: |
+    groups:
+      - name: llmmllab-alerts
+        rules:
+          - alert: HighErrorRate
+            expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High HTTP error rate (>5%) on {{ $labels.job }}"
+
+          - alert: HighLatency
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 30
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High p95 latency (>30s) on {{ $labels.job }}"
+
+          - alert: GPUHighTemperature
+            expr: gpu_temperature_celsius > 78
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "GPU {{ $labels.gpu_index }} temperature {{ $value }}°C on {{ $labels.instance }}"
+
+          - alert: GPUCriticalTemperature
+            expr: gpu_temperature_celsius > 88
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "GPU {{ $labels.gpu_index }} CRITICAL temperature {{ $value }}°C on {{ $labels.instance }}"
+
+          - alert: HighEmptyRetryRate
+            expr: sum(increase(empty_response_retries_total[1h])) > 20
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High empty response retry rate ({{ $value }} in last hour)"
+
+          - alert: NoActiveServers
+            expr: llama_servers_active == 0
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "No active llama.cpp servers on {{ $labels.runner_name }}"

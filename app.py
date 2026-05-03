@@ -55,6 +55,7 @@ from routers import (
     documents,
     ollama,
     api_key,
+    metrics as metrics_router,
 )
 from routers.openai import ROUTERS as OPENAI_ROUTERS
 from routers.anthropic import ROUTERS as ANTHROPIC_ROUTERS
@@ -64,6 +65,9 @@ from middleware import (
     db_init_middleware,
     MessageValidationMiddleware,
 )
+from middleware.request_id import RequestIdMiddleware
+from middleware.prometheus_metrics import PrometheusMiddleware
+from middleware.tracing import setup_tracing, shutdown_tracing
 from config import AUTH_JWKS_URI
 from services.cleanup_service import cleanup_service
 from db.maintenance import maintenance_service
@@ -160,8 +164,10 @@ async def lifespan(_: FastAPI):
         except Exception as e:
             logger.info(f"Error closing runner client: {e}")
 
-        cleanup_service.shutdown()
+        # Shutdown tracing
+        shutdown_tracing()
 
+        cleanup_service.shutdown()
 
 logger.info(f"Pre-initializing auth middleware with JWKS URI: {AUTH_JWKS_URI}")
 global_auth_middleware = AuthMiddleware(AUTH_JWKS_URI)
@@ -216,6 +222,8 @@ app.state.auth_middleware = global_auth_middleware
 # Add message validation middleware to ensure proper response structure
 app.add_middleware(MessageValidationMiddleware)
 app.middleware("http")(db_init_middleware)
+app.add_middleware(RequestIdMiddleware)
+app.add_middleware(PrometheusMiddleware)
 
 
 # Monkey-patch app.openapi() to add security schemes
@@ -268,6 +276,7 @@ async def auth_middleware_handler(request: Request, call_next):
     # Skip auth for public endpoints
     public_paths = [
         "/health",
+        "/metrics",
         "/docs",
         "/redoc",
         "/openapi.json",
@@ -372,6 +381,10 @@ for router in COMMON_ROUTERS:
 
 # Include API key management endpoints
 app.include_router(api_key.router)
+app.include_router(metrics_router.router)
+
+# Initialize distributed tracing
+setup_tracing("llmmllab-api", app)
 
 
 @app.get("/health")

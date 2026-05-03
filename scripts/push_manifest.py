@@ -11,10 +11,11 @@ Usage:
 """
 
 import argparse
-import hashlib
+import base64
 import json
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -27,14 +28,45 @@ def get_image_digest(image: str) -> str:
         ],
         text=True,
     ).strip()
-    # Returns e.g. "registry/repo:tag@sha256:abc..."
     if "@" in out:
         return out.split("@", 1)[1]
-    # Fallback: get the ID
     img_id = subprocess.check_output(
         ["docker", "inspect", "--format", "{{.Id}}", image], text=True
     ).strip()
     return f"sha256:{img_id}"
+
+
+def fetch_manifest_from_registry(
+    registry: str, repo: str, tag: str, auth: str,
+) -> tuple[str, int]:
+    """Fetch a manifest from the registry, returning (digest, size)."""
+    url = f"http://{registry}/v2/{repo}/manifests/{tag}"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Basic {auth}",
+            "Accept": "application/vnd.oci.image.manifest.v1+json",
+        },
+        method="GET",
+    )
+    for attempt in range(1, 7):
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = resp.read()
+                size = len(body)
+                digest = resp.headers.get(
+                    "Docker-Content-Digest"
+                ) or resp.headers.get("ETag", "").strip('"')
+                return digest, size
+        except urllib.error.HTTPError as e:
+            if e.code == 404 and attempt < 7:
+                wait = 2 ** attempt
+                print(f"  Manifest not found (attempt {attempt}/6), waiting {wait}s...")
+                time.sleep(wait)
+            else:
+                detail = e.read().decode()
+                raise SystemExit(f"  HTTP {e.code}: {detail}")
+    raise SystemExit("  Manifest fetch exhausted retries")
 
 
 def push_manifest(
@@ -72,25 +104,31 @@ def main():
     parser.add_argument("--password", required=True)
     args = parser.parse_args()
 
-    import base64
-
     auth = base64.b64encode(f"{args.user}:{args.password}".encode()).decode()
 
     platforms = [
-        ("amd64", f"{args.registry}/{args.repo}:{args.tag}-amd64"),
-        ("arm64", f"{args.registry}/{args.repo}:{args.tag}-arm64"),
+        ("amd64", f"{args.tag}-amd64"),
+        ("arm64", f"{args.tag}-arm64"),
     ]
 
     manifests = []
-    for arch, image in platforms:
-        print(f"Getting digest for {image}...")
-        digest = get_image_digest(image)
-        print(f"  {digest}")
+    for arch, arch_tag in platforms:
+        full_image = f"{args.registry}/{args.repo}:{arch_tag}"
+        print(f"Getting digest for {full_image}...")
+        local_digest = get_image_digest(full_image)
+        print(f"  Local digest: {local_digest}")
+
+        print(f"  Fetching manifest from registry...")
+        digest, size = fetch_manifest_from_registry(
+            args.registry, args.repo, arch_tag, auth,
+        )
+        print(f"  Registry digest: {digest}")
+        print(f"  Size: {size}")
         manifests.append(
             {
                 "mediaType": "application/vnd.oci.image.manifest.v1+json",
                 "digest": digest,
-                "size": 2582,  # typical OCI manifest size
+                "size": size,
                 "platform": {"architecture": arch, "os": "linux"},
             }
         )

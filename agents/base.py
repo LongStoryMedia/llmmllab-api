@@ -75,7 +75,7 @@ class BaseAgent:
         self,
         model: BaseChatModel,
         system_prompt: str = "",
-        num_ctx: int = 100000,
+        num_ctx: int = 90000,
         component_name: Optional[str] = None,
         middleware: Optional[List[AgentMiddleware]] = None,
         tools: Optional[List[BaseTool]] = None,

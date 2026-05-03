@@ -32,7 +32,7 @@ from models import (
     MessageContentType,
     WorkflowConfig,
 )
-from services.runner_client import runner_client, ServerHandle
+from services.runner_client import runner_client
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
@@ -93,7 +93,6 @@ class IdeGraphBuilder(GraphBuilder):
 
     def __init__(self, storage: "Storage", user_config: UserConfig):
         super().__init__(storage, user_config)
-        self._server_handle: Optional[ServerHandle] = None
 
     async def build_workflow(
         self,
@@ -162,7 +161,7 @@ class IdeGraphBuilder(GraphBuilder):
                 stream_usage=True,
                 max_retries=0,
             )
-            self._server_handle = server_handle
+            self.server_handle = server_handle
 
             # Bind client tools to the pipeline so the LLM can generate tool_calls
             if client_tools:
@@ -174,7 +173,7 @@ class IdeGraphBuilder(GraphBuilder):
                 model=cast(BaseChatModel, primary_model),
                 system_prompt=model_def.system_prompt or IDE_PRIMARY_SYSTEM_PROMPT,
                 num_ctx=(model_def.parameters.num_ctx if model_def.parameters else None)
-                or 100000,
+                or 90000,
                 component_name="PrimaryCodingAgent",
             )
 

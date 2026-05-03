@@ -13,6 +13,7 @@ logger = llmmllogger.logger.bind(component="Server")
 
 # ── Logging ──────────────────────────────────────────────────────────
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "WARNING")
+LOG_FORMAT = os.environ.get("LOG_FORMAT", "console")
 
 # ── Authentication ───────────────────────────────────────────────────
 AUTH_ISSUER = os.environ.get("AUTH_ISSUER", "https://auth.longstorymedia.com")

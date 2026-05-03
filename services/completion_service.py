@@ -14,6 +14,7 @@ in Anthropic/OpenAI format, raw JSON for llmmllab).
 """
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Optional, Union
@@ -32,6 +33,16 @@ from models.tool_call import ToolCall
 from utils.logging import llmmllogger
 
 logger = llmmllogger.bind(component="completion_service")
+
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+
+from middleware.api_metrics import (  # noqa: E402
+    workflow_completions_total,
+    workflow_duration_seconds,
+    empty_response_retries_total,
+)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -122,6 +133,52 @@ class CompletionService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    async def build_workflow(
+        user_id: str,
+        model_name: str,
+        workflow_type: WorkFlowType,
+        client_tools: list | None = None,
+        tool_choice: str | None = None,
+        server_tool_names: set[str] | None = None,
+    ):
+        """Build a composer workflow and return (workflow, builder, server_url)."""
+        builder = await get_graph_builder(workflow_type, user_id)
+        workflow = await compose_workflow(
+            user_id=user_id,
+            builder=builder,
+            model_name=model_name,
+            client_tools=client_tools,
+            tool_choice=tool_choice,
+            server_tool_names=server_tool_names or None,
+        )
+        server_url = None
+        if builder.server_handle:
+            server_url = builder.server_handle.base_url
+        return workflow, builder, server_url
+
+    @staticmethod
+    async def _run_workflow(
+        initial_state,
+        workflow,
+        workflow_type: WorkFlowType,
+    ) -> AsyncIterator[Union[ChatResponse, ServerToolEvent]]:
+        """Execute a composed workflow and yield its events."""
+        start = time.monotonic()
+        finished = False
+        async for event in execute_workflow(initial_state, workflow):
+            yield event
+            if not finished and isinstance(event, ChatResponse) and event.done:
+                finished = True
+                duration = time.monotonic() - start
+                status = "success" if event.finish_reason != "error" else "error"
+                workflow_completions_total.labels(
+                    workflow_type=workflow_type.value, status=status
+                ).inc()
+                workflow_duration_seconds.labels(
+                    workflow_type=workflow_type.value
+                ).observe(duration)
+
+    @staticmethod
     async def _build_and_run(
         user_id: str,
         messages: list[Message],
@@ -133,19 +190,20 @@ class CompletionService:
         server_tool_names: set[str] | None = None,
     ) -> AsyncIterator[Union[ChatResponse, ServerToolEvent]]:
         """Build a composer workflow and yield its events."""
-        builder = await get_graph_builder(workflow_type, user_id)
-        workflow = await compose_workflow(
-            user_id=user_id,
-            builder=builder,
-            model_name=model_name,
-            client_tools=client_tools,
-            tool_choice=tool_choice,
-            server_tool_names=server_tool_names or None,
+        workflow, builder, _server_url = await CompletionService.build_workflow(
+            user_id,
+            model_name,
+            workflow_type,
+            client_tools,
+            tool_choice,
+            server_tool_names,
         )
         initial_state = await create_initial_state(
             user_id, conversation_id, builder, messages
         )
-        async for event in execute_workflow(initial_state, workflow):
+        async for event in CompletionService._run_workflow(
+            initial_state, workflow, workflow_type
+        ):
             yield event
 
     # ------------------------------------------------------------------
@@ -300,6 +358,7 @@ class CompletionService:
                     "Model produced empty response — retrying with same messages",
                     extra={"model": model_name},
                 )
+                empty_response_retries_total.inc()
                 async for event in CompletionService._build_and_run(
                     user_id,
                     messages,
@@ -512,6 +571,7 @@ class CompletionService:
                 "Non-streaming: model produced empty response — retrying",
                 extra={"model": model_name},
             )
+            empty_response_retries_total.inc()
             async for event in CompletionService._build_and_run(
                 user_id,
                 messages,

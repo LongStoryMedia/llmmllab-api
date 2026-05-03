@@ -11,8 +11,8 @@ def estimate_tokens(content: Any) -> int:
     """
     Estimate token count for any content type using consistent approximation.
 
-    Uses the standard approximation of ~4 characters per token, which works
-    reasonably well for English text and code.
+    Uses ~3 characters per token. This is a compromise between natural English
+    (~4 chars/token) and code (~2-2.5 chars/token).
 
     Args:
         content: Content to estimate tokens for (str, list, dict, object)
@@ -21,8 +21,7 @@ def estimate_tokens(content: Any) -> int:
         Approximate token count
     """
     if isinstance(content, str):
-        # Basic approximation: ~4 characters per token
-        return len(content) // 4
+        return len(content) // 3
     elif isinstance(content, list):
         return sum(estimate_tokens(item) for item in content)
     elif isinstance(content, dict):
@@ -33,7 +32,7 @@ def estimate_tokens(content: Any) -> int:
         return estimate_tokens(str(content))
     else:
         # Fallback: convert to string and estimate
-        return len(str(content)) // 4
+        return len(str(content)) // 3
 
 
 def estimate_message_tokens(message: Message) -> int:

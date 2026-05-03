@@ -30,7 +30,7 @@ from models import (
     MessageContentType,
     UserConfig,
 )
-from services.runner_client import runner_client, ServerHandle
+from services.runner_client import runner_client
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pydantic import SecretStr
 
@@ -71,8 +71,6 @@ class DialogGraphBuilder(GraphBuilder):
 
     def __init__(self, storage: "Storage", user_config: UserConfig):
         super().__init__(storage, user_config)
-        self._primary_handle: Optional[ServerHandle] = None
-        self._embedding_handle: Optional[ServerHandle] = None
 
     async def build_workflow(
         self,
@@ -125,8 +123,7 @@ class DialogGraphBuilder(GraphBuilder):
                 base_url=embedding_handle.base_url,
                 api_key="none",
             )
-            self._primary_handle = primary_handle
-            self._embedding_handle = embedding_handle
+            self.server_handle = primary_handle
 
             primary_agent = ChatAgent(
                 model=cast(BaseChatModel, primary_model),
@@ -136,7 +133,7 @@ class DialogGraphBuilder(GraphBuilder):
                     if primary_model_def.parameters
                     else None
                 )
-                or 100000,
+                or 90000,
                 component_name="PrimaryChatAgent",
             )
             embedding_agent = EmbeddingAgent(

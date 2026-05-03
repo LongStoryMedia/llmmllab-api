@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from db.summary_storage import SummaryStorage
     from db.search_storage import SearchStorage
     from db.checkpoint_storage import CheckpointStorage
+    from services.runner_client import ServerHandle
 
 
 def should_continue_tool_calls(state: WorkflowState) -> str:
@@ -48,6 +49,8 @@ class GraphBuilder(ABC):
     Holds per-user storage handles and a logger. Subclasses implement
     `build_workflow` and `create_initial_state`.
     """
+
+    server_handle: Optional["ServerHandle"] = None
 
     def __init__(self, storage: "Storage", user_config: UserConfig):
         self.user_config = user_config
