@@ -11,6 +11,7 @@ the overhead of opening a new TCP connection for every request.
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -76,6 +77,123 @@ class RunnerClient:
                 ),
             )
         return self._client
+
+    # ------------------------------------------------------------------
+    # Retry-After aware request proxying
+    # ------------------------------------------------------------------
+
+    async def proxy_request(
+        self,
+        handle: ServerHandle,
+        method: str,
+        path: str,
+        *,
+        json: Optional[Dict[str, Any]] = None,
+        stream: bool = False,
+        timeout: float = 120.0,  # total backoff budget in seconds
+    ) -> httpx.Response:
+        """Send a request to a server handle, respecting Retry-After on 503.
+
+        When the runner proxy returns 503 (all slots busy), reads the
+        ``Retry-After`` header and sleeps before retrying.  Uses
+        exponential backoff (2 s, 4 s, 8 s, …) capped by the ``Retry-After``
+        value, and stops when the cumulative backoff would exceed *timeout*.
+
+        Parameters
+        ----------
+        handle:
+            The ``ServerHandle`` returned by ``acquire_server()``.
+        method:
+            HTTP method (``GET``, ``POST``, etc.).
+        path:
+            Path to append to the server's base URL.
+        json:
+            Optional JSON body.
+        stream:
+            If ``True`` the caller is responsible for draining and closing
+            the response.
+        timeout:
+            Total backoff budget in seconds.  Once the cumulative sleep
+            would exceed this, the last 503 response is returned.
+
+        Returns
+        -------
+        httpx.Response
+            The final response (may still be 503 if timeout exhausted).
+        """
+        url = f"{handle.base_url}/{path.lstrip('/')}"
+        client = self._get_client()
+
+        # First attempt (no backoff yet)
+        response = await client.request(
+            method=method,
+            url=url,
+            json=json,
+            timeout=_ACQUIRE_TIMEOUT,
+            stream=stream,
+        )
+
+        if response.status_code != 503:
+            return response
+
+        last_response = response
+        elapsed = 0.0
+        attempt = 0
+
+        while elapsed < timeout:
+            attempt += 1
+
+            # Read Retry-After header (seconds as integer)
+            retry_after = 30  # default fallback
+            retry_header = response.headers.get("retry-after")
+            if retry_header:
+                try:
+                    retry_after = int(retry_header)
+                except (ValueError, TypeError):
+                    pass
+
+            # Exponential backoff: 2^attempt seconds, capped by Retry-After
+            backoff = min(2**attempt, retry_after)
+
+            if elapsed + backoff > timeout:
+                break
+
+            logger.warning(
+                "Runner returned 503, backing off before retry",
+                extra={
+                    "server_id": handle.server_id,
+                    "retry_after": retry_after,
+                    "backoff": backoff,
+                    "attempt": attempt,
+                    "elapsed": round(elapsed, 1),
+                },
+            )
+            await asyncio.sleep(backoff)
+            elapsed += backoff
+
+            response = await client.request(
+                method=method,
+                url=url,
+                json=json,
+                timeout=_ACQUIRE_TIMEOUT,
+                stream=stream,
+            )
+
+            if response.status_code != 503:
+                return response
+
+            last_response = response
+
+        logger.error(
+            "Runner returned 503 after backoff timeout",
+            extra={
+                "server_id": handle.server_id,
+                "elapsed": round(elapsed, 1),
+                "timeout": timeout,
+            },
+        )
+
+        return last_response
 
     async def aclose(self) -> None:
         """Close the shared HTTP client.  Call during app shutdown."""
