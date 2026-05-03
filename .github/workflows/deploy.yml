@@ -1,0 +1,61 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Build & Deploy API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+            
+            # Tag with commit SHA and latest
+            REGISTRY=192.168.0.71:31500
+            IMAGE=llmmllab-api
+            SHA=${{ github.sha }}
+            SHORT_SHA=$(echo $SHA | cut -c1-7)
+            
+            echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
+            
+            # Build amd64
+            docker buildx build --builder multibuilder --platform linux/amd64 \
+              -t ${REGISTRY}/${IMAGE}:${SHA}-amd64 --load .
+            
+            # Build arm64
+            docker buildx build --builder multibuilder --platform linux/arm64 \
+              -t ${REGISTRY}/${IMAGE}:${SHA}-arm64 --load .
+            
+            # Push arch-specific images
+            docker push ${REGISTRY}/${IMAGE}:${SHA}-amd64
+            docker push ${REGISTRY}/${IMAGE}:${SHA}-arm64
+            
+            # Create multi-arch manifest
+            docker manifest create ${REGISTRY}/${IMAGE}:${SHA} \
+              ${REGISTRY}/${IMAGE}:${SHA}-amd64 \
+              ${REGISTRY}/${IMAGE}:${SHA}-arm64
+            docker manifest push ${REGISTRY}/${IMAGE}:${SHA}
+            
+            # Tag as latest too
+            docker manifest create ${REGISTRY}/${IMAGE}:latest \
+              ${REGISTRY}/${IMAGE}:${SHA}-amd64 \
+              ${REGISTRY}/${IMAGE}:${SHA}-arm64
+            docker manifest push ${REGISTRY}/${IMAGE}:latest
+            
+            # Update k8s deployment with SHA tag
+            kubectl set image -n llmmllab deployment/llmmllab-api \
+              llmmllab=${REGISTRY}/${IMAGE}:${SHA} \
+              --context=lsnet
+            
+            echo "Deployed llmmllab-api:${SHA}"
