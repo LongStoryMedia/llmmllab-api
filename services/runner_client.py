@@ -11,6 +11,7 @@ the overhead of opening a new TCP connection for every request.
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -76,6 +77,96 @@ class RunnerClient:
                 ),
             )
         return self._client
+
+    # ------------------------------------------------------------------
+    # Retry-After aware request proxying
+    # ------------------------------------------------------------------
+
+    async def proxy_request(
+        self,
+        handle: ServerHandle,
+        method: str,
+        path: str,
+        *,
+        json: Optional[Dict[str, Any]] = None,
+        stream: bool = False,
+        max_retries: int = 1,  # retry once on 503
+    ) -> httpx.Response:
+        """Send a request to a server handle, respecting Retry-After on 503.
+
+        When the runner proxy returns 503 (all slots busy), reads the
+        ``Retry-After`` header and sleeps before retrying.  After the
+        configured number of retries the original 503 response is returned.
+
+        Parameters
+        ----------
+        handle:
+            The ``ServerHandle`` returned by ``acquire_server()``.
+        method:
+            HTTP method (``GET``, ``POST``, etc.).
+        path:
+            Path to append to the server's base URL.
+        json:
+            Optional JSON body.
+        stream:
+            If ``True`` the caller is responsible for draining and closing
+            the response.
+        max_retries:
+            Number of retries on 503 (default 1).
+
+        Returns
+        -------
+        httpx.Response
+            The final response (may still be 503 if retries exhausted).
+        """
+        url = f"{handle.base_url}/{path.lstrip('/')}"
+        client = self._get_client()
+
+        last_response = None
+        for attempt in range(max_retries + 1):
+            response = await client.request(
+                method=method,
+                url=url,
+                json=json,
+                timeout=_ACQUIRE_TIMEOUT,
+                stream=stream,
+            )
+
+            if response.status_code != 503:
+                return response
+
+            last_response = response
+
+            # Read Retry-After header (seconds as integer)
+            retry_after = 30  # default fallback
+            retry_header = response.headers.get("retry-after")
+            if retry_header:
+                try:
+                    retry_after = int(retry_header)
+                except (ValueError, TypeError):
+                    pass
+
+            if attempt < max_retries:
+                logger.warning(
+                    "Runner returned 503, backing off before retry",
+                    extra={
+                        "server_id": handle.server_id,
+                        "retry_after": retry_after,
+                        "attempt": attempt + 1,
+                        "max_retries": max_retries,
+                    },
+                )
+                await asyncio.sleep(retry_after)
+            else:
+                logger.error(
+                    "Runner returned 503 after all retries exhausted",
+                    extra={
+                        "server_id": handle.server_id,
+                        "retry_after": retry_after,
+                    },
+                )
+
+        return last_response
 
     async def aclose(self) -> None:
         """Close the shared HTTP client.  Call during app shutdown."""
