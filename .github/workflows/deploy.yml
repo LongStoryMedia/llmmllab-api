@@ -1,1 +1,53 @@
-test
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Build & Deploy API
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & Deploy
+        run: |
+          set -euo pipefail
+          REGISTRY=192.168.0.71:31500
+          IMAGE=llmmllab-api
+          SHA=${{ github.sha }}
+          SHORT_SHA=$(echo $SHA | cut -c1-7)
+          
+          echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
+          
+          # Build multi-arch images
+          echo "Building amd64..."
+          docker buildx build --builder multibuilder --platform linux/amd64 \
+            -t ${REGISTRY}/${IMAGE}:${SHA}-amd64 --load .
+          
+          echo "Building arm64..."
+          docker buildx build --builder multibuilder --platform linux/arm64 \
+            -t ${REGISTRY}/${IMAGE}:${SHA}-arm64 --load .
+          
+          echo "Pushing images..."
+          docker push ${REGISTRY}/${IMAGE}:${SHA}-amd64
+          docker push ${REGISTRY}/${IMAGE}:${SHA}-arm64
+          
+          echo "Creating manifest..."
+          docker manifest create ${REGISTRY}/${IMAGE}:${SHA} \
+            ${REGISTRY}/${IMAGE}:${SHA}-amd64 \
+            ${REGISTRY}/${IMAGE}:${SHA}-arm64
+          docker manifest push ${REGISTRY}/${IMAGE}:${SHA}
+          
+          docker manifest create ${REGISTRY}/${IMAGE}:latest \
+            ${REGISTRY}/${IMAGE}:${SHA}-amd64 \
+            ${REGISTRY}/${IMAGE}:${SHA}-arm64
+          docker manifest push ${REGISTRY}/${IMAGE}:latest
+          
+          echo "Updating k8s deployment..."
+          kubectl set image -n llmmllab deployment/llmmllab-api \
+            llmmllab=${REGISTRY}/${IMAGE}:${SHA} \
+            --context=lsnet
+          
+          echo "Deployed llmmllab-api:${SHA}"
