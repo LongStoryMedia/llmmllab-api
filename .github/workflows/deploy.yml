@@ -14,9 +14,48 @@ jobs:
       - name: Build & Deploy
         run: |
           set -euo pipefail
+          REGISTRY=192.168.0.71:31500
+          IMAGE=llmmllab-api
           SHA=${{ github.sha }}
           SHORT_SHA=$(echo $SHA | cut -c1-7)
+
           echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
 
-          # Build and push using the Makefile deploy target
-          DOCKER_TAG=$SHA make deploy
+          # Build amd64 image
+          echo "Building amd64 image..."
+          docker buildx build --builder multibuilder --platform linux/amd64 \
+            -t ${REGISTRY}/${IMAGE}:${SHA}-amd64 --load .
+
+          # Build arm64 image
+          echo "Building arm64 image..."
+          docker buildx build --builder multibuilder --platform linux/arm64 \
+            -t ${REGISTRY}/${IMAGE}:${SHA}-arm64 --load .
+
+          # Push images
+          echo "Pushing images..."
+          docker push ${REGISTRY}/${IMAGE}:${SHA}-amd64
+          docker push ${REGISTRY}/${IMAGE}:${SHA}-arm64
+
+          # Create multi-arch manifest using the project's script
+          echo "Creating multi-arch manifest..."
+          python3 scripts/push_manifest.py \
+            --registry ${REGISTRY} \
+            --repo ${IMAGE} \
+            --tag ${SHA} \
+            --user bcf186aef4ebc292 \
+            --password b6c988…2137
+
+          # Also create latest manifest
+          python3 scripts/push_manifest.py \
+            --registry ${REGISTRY} \
+            --repo ${IMAGE} \
+            --tag latest \
+            --user bcf186aef4ebc292 \
+            --password b6c988…2137
+
+          # Deploy to Kubernetes
+          echo "Deploying to Kubernetes..."
+          chmod +x k8s/apply.sh
+          DOCKER_TAG=${SHA} ./k8s/apply.sh
+
+          echo "Deployed llmmllab-api:${SHA}"
