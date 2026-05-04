@@ -11,27 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Register QEMU for cross-platform builds
-        uses: docker/setup-qemu-action@v3
-
       - name: Build & Deploy
         run: |
           set -euo pipefail
-          REGISTRY=192.168.0.71:31500
-          IMAGE=llmmllab-api
           SHA=${{ github.sha }}
           SHORT_SHA=$(echo $SHA | cut -c1-7)
-          
           echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
-          
-          # Build and push multi-arch images directly with buildx
-          docker buildx build --platform linux/amd64,linux/arm64 \
-            -t ${REGISTRY}/${IMAGE}:${SHA} \
-            -t ${REGISTRY}/${IMAGE}:latest \
-            --push .
-          
-          echo "Updating k8s deployment..."
-          kubectl set image -n llmmllab deployment/llmmllab-api \
-            llmmllab=${REGISTRY}/${IMAGE}:${SHA}
-          
-          echo "Deployed llmmllab-api:${SHA}"
+
+          # Build and push using the Makefile deploy target
+          DOCKER_TAG=$SHA make deploy
