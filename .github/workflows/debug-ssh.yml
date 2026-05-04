@@ -1,0 +1,41 @@
+name: Debug SSH
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Debug SSH
+        run: |
+          echo "=== SSH Agent Info ==="
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
+          ssh-add -l
+          
+          echo ""
+          echo "=== Verbose SSH Connection ==="
+          ssh -vvv -o StrictHostKeyChecking=no -o BatchMode=yes lsm@lsnet.tplinkdns.com "echo connected" 2>&1 || true
+          
+          echo ""
+          echo "=== Generate New Deploy Key ==="
+          mkdir -p /tmp/deploy-key
+          ssh-keygen -t ed25519 -f /tmp/deploy-key/id_ed25519 -N "" -C "github-actions-deploy"
+          echo ""
+          echo "=== PUBLIC KEY (add this to ~/.ssh/authorized_keys on lsnode-3 for user lsm) ==="
+          cat /tmp/deploy-key/id_ed25519.pub
+          echo ""
+          echo "=== PRIVATE KEY (store as SSH_DEPLOY_KEY secret) ==="
+          cat /tmp/deploy-key/id_ed25519
+
+      - name: Upload Deploy Key
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-key
+          path: /tmp/deploy-key/
+          retention-days: 1
