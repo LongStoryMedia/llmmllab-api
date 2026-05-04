@@ -4,9 +4,6 @@ on:
   push:
     branches: [main]
 
-env:
-  SSH_STRICT_HOST_KEY_CHECKING: "no"
-
 jobs:
   deploy:
     name: Build & Deploy API
@@ -22,57 +19,60 @@ jobs:
       - name: Deploy via SSH
         run: |
           set -euo pipefail
-          
+
           SSH_HOST="${{ secrets.SSH_HOST }}"
           SSH_USER="${{ secrets.SSH_USER }}"
           REGISTRY=192.168.0.71:31500
           IMAGE=llmmllab-api
           SHA=${{ github.sha }}
           SHORT_SHA=$(echo $SHA | cut -c1-7)
-          
+
           echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
-          
-          # Sync repo to remote
-          ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "mkdir -p /tmp/llmmllab-api-build && rm -rf /tmp/llmmllab-api-build/*"
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" . $SSH_USER@$SSH_HOST:/tmp/llmmllab-api-build/
-          
+
+          # Verify SSH connectivity first
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "echo 'SSH connection OK'"
+
+          # Sync repo to remote using tar over ssh (respects ssh-agent)
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "rm -rf /tmp/llmmllab-api-build && mkdir -p /tmp/llmmllab-api-build"
+          tar cf - . | ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "cd /tmp/llmmllab-api-build && tar xf -"
+
           # Run build on remote
           ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST bash -s <<REMOTE
             set -euo pipefail
             cd /tmp/llmmllab-api-build
-            
+
             REGISTRY=$REGISTRY
             IMAGE=$IMAGE
             SHA=$SHA
             SHORT_SHA=$SHORT_SHA
-            
+
             echo "Building amd64..."
             docker buildx build --builder multibuilder --platform linux/amd64 \
               -t \${REGISTRY}/\${IMAGE}:\${SHA}-amd64 --load .
-            
+
             echo "Building arm64..."
             docker buildx build --builder multibuilder --platform linux/arm64 \
               -t \${REGISTRY}/\${IMAGE}:\${SHA}-arm64 --load .
-            
+
             echo "Pushing images..."
             docker push \${REGISTRY}/\${IMAGE}:\${SHA}-amd64
             docker push \${REGISTRY}/\${IMAGE}:\${SHA}-arm64
-            
+
             echo "Creating manifest..."
             docker manifest create \${REGISTRY}/\${IMAGE}:\${SHA} \
               \${REGISTRY}/\${IMAGE}:\${SHA}-amd64 \
               \${REGISTRY}/\${IMAGE}:\${SHA}-arm64
             docker manifest push \${REGISTRY}/\${IMAGE}:\${SHA}
-            
+
             docker manifest create \${REGISTRY}/\${IMAGE}:latest \
               \${REGISTRY}/\${IMAGE}:\${SHA}-amd64 \
               \${REGISTRY}/\${IMAGE}:\${SHA}-arm64
             docker manifest push \${REGISTRY}/\${IMAGE}:latest
-            
+
             echo "Updating k8s deployment..."
             kubectl set image -n llmmllab deployment/llmmllab-api \
               llmmllab=\${REGISTRY}/\${IMAGE}:\${SHA} \
               --context=lsnet
-            
+
             echo "Deployed llmmllab-api:\${SHA}"
           REMOTE
