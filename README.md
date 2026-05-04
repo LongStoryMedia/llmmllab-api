@@ -13,6 +13,8 @@ cp .env.example .env
 # 2. Install dependencies (requires uv)
 uv sync
 
+
+<!-- trigger deploy -->
 # 3. Run
 make start
 ```
