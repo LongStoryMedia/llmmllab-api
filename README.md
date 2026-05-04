@@ -88,3 +88,5 @@ Deployments are automated via GitHub Actions on merges to `main`. Images are tag
 
 <!-- trigger deploy -->
 
+
+<!-- trigger self-hosted deploy -->
