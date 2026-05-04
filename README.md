@@ -84,3 +84,4 @@ Manifests in `k8s/` include deployment, service, PVC, and secrets setup.
 ## CI/CD
 
 Deployments are automated via GitHub Actions on merges to `main`. Images are tagged with the commit SHA and `latest`.
+
