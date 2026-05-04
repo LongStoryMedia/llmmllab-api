@@ -11,6 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Register QEMU for cross-platform builds
+        uses: docker/setup-qemu-action@v3
+
       - name: Build & Deploy
         run: |
           set -euo pipefail
@@ -21,13 +24,13 @@ jobs:
           
           echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
           
-          # Build multi-arch images
+          # Build multi-arch images using buildx with QEMU emulation
           echo "Building amd64..."
-          docker buildx build --builder multibuilder --platform linux/amd64 \
+          docker buildx build --platform linux/amd64 \
             -t ${REGISTRY}/${IMAGE}:${SHA}-amd64 --load .
           
           echo "Building arm64..."
-          docker buildx build --builder multibuilder --platform linux/arm64 \
+          docker buildx build --platform linux/arm64 \
             -t ${REGISTRY}/${IMAGE}:${SHA}-arm64 --load .
           
           echo "Pushing images..."
