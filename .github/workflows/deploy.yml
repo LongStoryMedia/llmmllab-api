@@ -18,5 +18,37 @@ jobs:
           SHORT_SHA=$(echo $SHA | cut -c1-7)
           echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
 
-          # Build and push using the Makefile deploy target
-          DOCKER_TAG=$SHA make deploy
+          REGISTRY=192.168.0.71:31500
+          DOCKER_IMAGE=llmmllab-api
+          DOCKER_TAG=$SHA
+
+          # Build amd64
+          echo "Building amd64 image..."
+          docker buildx build --builder multibuilder --platform linux/amd64 \
+            -t ${REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}-amd64 --load .
+
+          # Build arm64
+          echo "Building arm64 image..."
+          docker buildx build --builder multibuilder --platform linux/arm64 \
+            -t ${REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}-arm64 --load .
+
+          # Push images
+          echo "Pushing images..."
+          docker push ${REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}-amd64
+          docker push ${REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}-arm64
+
+          # Create multi-arch manifest
+          echo "Creating multi-arch manifest..."
+          python3 scripts/push_manifest.py \
+            --registry ${REGISTRY} \
+            --repo ${DOCKER_IMAGE} \
+            --tag ${DOCKER_TAG} \
+            --user bcf186aef4ebc292 \
+            --password b6c98846d1e66359903a2137
+
+          # Update k8s
+          echo "Updating k8s deployment..."
+          chmod +x k8s/apply.sh
+          DOCKER_TAG=${DOCKER_TAG} ./k8s/apply.sh
+
+          echo "Deployment complete!"
