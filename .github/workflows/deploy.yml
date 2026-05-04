@@ -11,23 +11,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+
+      - name: Deploy via SSH
+        run: |
+          set -euo pipefail
+          
+          SSH_HOST="${{ secrets.SSH_HOST }}"
+          SSH_USER="${{ secrets.SSH_USER }}"
+          REGISTRY=192.168.0.71:31500
+          IMAGE=llmmllab-api
+          SHA=${{ github.sha }}
+          SHORT_SHA=$(echo $SHA | cut -c1-7)
+          
+          echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
+          
+          cd repo
+          
+          # Build amd64
+          ssh $SSH_USER@$SSH_HOST "cd /tmp && mkdir -p llmmllab-api-build && rm -rf llmmllab-api-build/*"
+          rsync -avz --delete -e ssh . $SSH_USER@$SSH_HOST:/tmp/llmmllab-api-build/
+          
+          ssh $SSH_USER@$SSH_HOST bash -s <<'REMOTE'
             set -euo pipefail
+            cd /tmp/llmmllab-api-build
             
-            # Tag with commit SHA and latest
             REGISTRY=192.168.0.71:31500
             IMAGE=llmmllab-api
-            SHA=${{ github.sha }}
-            SHORT_SHA=$(echo $SHA | cut -c1-7)
-            
-            echo "Building llmmllab-api (SHA: $SHORT_SHA)..."
+            SHA=${SHA}
+            SHORT_SHA=${SHORT_SHA}
             
             # Build amd64
             docker buildx build --builder multibuilder --platform linux/amd64 \
@@ -59,3 +78,4 @@ jobs:
               --context=lsnet
             
             echo "Deployed llmmllab-api:${SHA}"
+          REMOTE
