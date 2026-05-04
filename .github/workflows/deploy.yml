@@ -42,16 +42,16 @@ jobs:
             --registry ${REGISTRY} \
             --repo ${IMAGE} \
             --tag ${SHA} \
-            --user bcf186aef4ebc292 \
-            --password b6c988…2137
+            --user ${{ secrets.REGISTRY_USER }} \
+            --password ${{ secrets.REGISTRY_PASSWORD }}
 
           # Also create latest manifest
           python3 scripts/push_manifest.py \
             --registry ${REGISTRY} \
             --repo ${IMAGE} \
             --tag latest \
-            --user bcf186aef4ebc292 \
-            --password b6c988…2137
+            --user ${{ secrets.REGISTRY_USER }} \
+            --password ${{ secrets.REGISTRY_PASSWORD }}
 
           # Deploy to Kubernetes
           echo "Deploying to Kubernetes..."
