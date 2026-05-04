@@ -40,7 +40,7 @@ Copy `.env.example` to `.env` and set the required values:
 | Variable | Description |
 |----------|-------------|
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | PostgreSQL connection |
-| `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT` | Redis cache (optional) |
+| `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT` | Redis cache (optional)
 | `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_JWKS_URI` | JWT auth (JWT + API key) |
 | `HF_TOKEN` | HuggingFace token for model downloads |
 | `PORT` | Server port (default: 8000) |
@@ -80,3 +80,7 @@ make deploy DOCKER_TAG=main
 ```
 
 Manifests in `k8s/` include deployment, service, PVC, and secrets setup.
+
+## CI/CD
+
+Deployments are automated via GitHub Actions on merges to `main`. Images are tagged with the commit SHA and `latest`.
